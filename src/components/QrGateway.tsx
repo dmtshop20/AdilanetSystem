@@ -162,7 +162,7 @@ export default function QrGateway({
     if (!activeTx) return;
     try {
       setManualCheckLoading(true);
-      setLastCheckMessage("Mengecek status pembayaran langsung ke Sanpay.id...");
+      setLastCheckMessage("Mengecek status pembayaran langsung ke sanpay.site...");
       
       const res = await fetch(`/api/qris/check-status/${activeTx.transactionId}`);
       if (res.ok) {
@@ -205,7 +205,7 @@ export default function QrGateway({
 
       if (res.ok) {
         setIsConfigOpen(false);
-        alert(`✅ Kredensial Payment Gateway Sanpay.id berhasil disimpan secara aman server-side!`);
+        alert(`✅ Kredensial Payment Gateway sanpay.site berhasil disimpan secara aman server-side!`);
       } else {
         alert("Gagal melakukan sinkronisasi kredensial ke server backend.");
       }
@@ -243,11 +243,11 @@ export default function QrGateway({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
             <span className="bg-emerald-500/20 text-emerald-300 font-mono text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-              INTEGRASI PREMIUM SANPAY.ID
+              INTEGRASI PREMIUM SANPAY.SITE
             </span>
-            <h2 className="text-lg font-extrabold tracking-tight">Sanpay.id Gateway Hub</h2>
+            <h2 className="text-lg font-extrabold tracking-tight">Sanpay.site Gateway Hub</h2>
             <p className="text-xs text-slate-300 leading-relaxed max-w-xl">
-              Saluran verifikasi QRIS otomatis berbasis callback webhook dan simulasi terintegrasi. Menghubungkan secara langsung dengan server API pay.sanpay.id untuk validasi pembayaran instan.
+              Saluran verifikasi QRIS otomatis berbasis callback webhook dan simulasi terintegrasi. Menghubungkan secara langsung dengan server API sanpay.site untuk validasi pembayaran instan.
             </p>
           </div>
 
@@ -382,7 +382,7 @@ export default function QrGateway({
             <div className="bg-slate-900 p-4 rounded-xl border border-indigo-500/35 border-dashed space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-indigo-300 font-mono font-bold tracking-wider uppercase block">
-                  🌐 ALAMAT WEBHOOK CALLBACK SANPAY.ID
+                  🌐 ALAMAT WEBHOOK CALLBACK SANPAY.SITE
                 </span>
                 <span className="text-[9px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded font-mono font-bold">READY TO RECEIVE</span>
               </div>
@@ -446,7 +446,7 @@ export default function QrGateway({
           <div className="p-6 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <span className="text-[9px] font-bold font-mono text-slate-400 uppercase">SANPAY.ID BILLING SYSTEM</span>
+                <span className="text-[9px] font-bold font-mono text-slate-400 uppercase">SANPAY.SITE BILLING SYSTEM</span>
                 <h3 className="text-base font-bold text-slate-900">{activeTx.note}</h3>
               </div>
               <button 
@@ -517,7 +517,7 @@ export default function QrGateway({
 
                 {activeTx.status === "Pending" && (
                   <div className="p-3 bg-indigo-50 rounded-lg text-[10px] text-indigo-800 border border-indigo-100 leading-relaxed font-semibold">
-                    💡 <strong>PENTING:</strong> Agar terintegrasi otomatis ke Sanpay.id, pembayar wajib mentransfer nominal pas <strong>{formatRupiah(activeTx.totalPayment)}</strong>. Jangan dibulatkan!
+                    💡 <strong>PENTING:</strong> Agar terintegrasi otomatis ke sanpay.site, pembayar wajib mentransfer nominal pas <strong>{formatRupiah(activeTx.totalPayment)}</strong>. Jangan dibulatkan!
                   </div>
                 )}
               </div>
@@ -546,7 +546,7 @@ export default function QrGateway({
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Gateway Target:</span>
-                    <span className="text-indigo-400 font-bold">{sanpayMode === "Production" ? "Sanpay.id LIVE API Server" : "Sanpay.id Simulation/Local Sandbox"}</span>
+                    <span className="text-indigo-400 font-bold">{sanpayMode === "Production" ? "sanpay.site LIVE API Server" : "sanpay.site Simulation/Local Sandbox"}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Pesan Log:</span>
@@ -597,7 +597,7 @@ export default function QrGateway({
                     }}
                     className="flex-1 text-center bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 rounded-xl shadow-xs cursor-pointer border-b-2 border-emerald-800"
                   >
-                    Simulasi Webhook Sanpay.id (PAID) &rarr; Aktivasi Voucher WiFi/User
+                    Simulasi Webhook sanpay.site (PAID) &rarr; Aktivasi Voucher WiFi/User
                   </button>
                 </div>
               </div>
@@ -656,7 +656,7 @@ export default function QrGateway({
                   type="submit"
                   className="w-full text-center bg-indigo-600 hover:bg-indigo-750 text-white font-bold text-xs py-2.5 rounded-xl transition-all shadow-3xs cursor-pointer"
                 >
-                  Buat Tagihan QRIS Sanpay.id
+                  Buat Tagihan QRIS sanpay.site
                 </button>
               </form>
             </div>
@@ -668,7 +668,7 @@ export default function QrGateway({
                 ALUR BERKOMUNIKASI OTOMATIS
               </h4>
               <ol className="text-[10px] space-y-2 list-decimal list-inside text-slate-300 font-medium leading-relaxed">
-                <li><strong className="text-white">Request Dynamic QR:</strong> Server melakukan request ke endpoint API Sanpay.id dengan menyertakan Kredensial API Merchant.</li>
+                <li><strong className="text-white">Request Dynamic QR:</strong> Server melakukan request ke endpoint API sanpay.site dengan menyertakan Kredensial API Merchant.</li>
                 <li><strong className="text-white">Penambahan Angka Unik:</strong> Untuk mencocokkan pembayaran tanpa bentrokan nominal, sistem menambahkan bilangan acak (misal, 20000 menjadi 20129).</li>
                 <li><strong className="text-white">Auto Polling Monitoring:</strong> Browser menyalakan countdown berkala untuk menanyakan status ke server secara terjadwal.</li>
                 <li><strong className="text-white">Auto Fulfillment:</strong> Begitu webhook terdeteksi atau status berubah lunas, saldo / voucher seketika dikirim ke member.</li>
@@ -680,8 +680,8 @@ export default function QrGateway({
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-3xs overflow-hidden flex flex-col">
             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="font-bold text-slate-800 text-sm">Log Transaksi Sanpay.id Gateway</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Semua request dynamic QRIS terintegrasi Sanpay.id secara aman</p>
+                <h3 className="font-bold text-slate-800 text-sm">Log Transaksi sanpay.site Gateway</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">Semua request dynamic QRIS terintegrasi sanpay.site secara aman</p>
               </div>
 
               <div className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-xs">

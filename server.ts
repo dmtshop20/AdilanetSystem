@@ -2,6 +2,9 @@ import express from "express";
 import path from "path";
 import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
+import { db as pgDb } from "./src/db/index.ts";
+import * as schema from "./src/db/schema.ts";
+import { eq } from "drizzle-orm";
 import { 
   VoucherPackage, 
   Voucher, 
@@ -171,6 +174,364 @@ const DEFAULTS = {
 
 // Local storage model
 let db = JSON.parse(JSON.stringify(DEFAULTS));
+
+async function loadDb() {
+  try {
+    const pkgResult = await pgDb.select().from(schema.packages);
+    const voucherResult = await pgDb.select().from(schema.vouchers);
+    const customerResult = await pgDb.select().from(schema.customers);
+    const transactionResult = await pgDb.select().from(schema.transactions);
+    const botResult = await pgDb.select().from(schema.botsConfig);
+    const chatResult = await pgDb.select().from(schema.chatLogs);
+    const mikrotikResult = await pgDb.select().from(schema.mikrotikConfig);
+    const sanpayResult = await pgDb.select().from(schema.sanpayConfig);
+    const displayResult = await pgDb.select().from(schema.displayConfig);
+
+    if (pkgResult.length === 0) {
+      console.log("[POSTGRES] DB is empty. Seeding defaults...");
+      
+      for (const p of DEFAULTS.packages) {
+        await pgDb.insert(schema.packages).values(p).onConflictDoNothing();
+      }
+      for (const v of DEFAULTS.vouchers) {
+        await pgDb.insert(schema.vouchers).values({
+          id: v.id,
+          code: v.code,
+          packageId: v.packageId,
+          packageName: v.packageName,
+          price: v.price,
+          status: v.status,
+          createdAt: v.createdAt,
+          soldTo: v.soldTo || null,
+          activatedAt: v.activatedAt || null,
+          expiresAt: v.expiresAt || null
+        }).onConflictDoNothing();
+      }
+      for (const c of DEFAULTS.customers) {
+        await pgDb.insert(schema.customers).values({
+          id: c.id,
+          name: c.name,
+          username: c.username,
+          password: c.password || null,
+          phone: c.phone,
+          saldo: c.saldo,
+          status: c.status,
+          joinedDate: c.joinedDate,
+          registeredVia: c.registeredVia
+        }).onConflictDoNothing();
+      }
+      for (const t of DEFAULTS.transactions) {
+        await pgDb.insert(schema.transactions).values({
+          id: t.id,
+          transactionId: t.transactionId,
+          customerId: t.customerId || "guest",
+          customerName: t.customerName,
+          type: t.type,
+          amount: t.amount,
+          uniqueCode: t.uniqueCode,
+          totalPayment: t.totalPayment,
+          status: t.status,
+          qrisPayload: t.qrisPayload || "",
+          note: t.note || null,
+          createdAt: t.createdAt,
+          paidAt: t.paidAt || null
+        }).onConflictDoNothing();
+      }
+      for (const b of DEFAULTS.botsConfig) {
+        await pgDb.insert(schema.botsConfig).values({
+          provider: b.provider,
+          apiKey: b.apiKey,
+          botUsername: b.botUsername || null,
+          status: b.status,
+          welcomeMessage: b.welcomeMessage,
+          autoRepliesEnabled: b.autoRepliesEnabled
+        }).onConflictDoNothing();
+      }
+      for (const cl of DEFAULTS.chatLogs) {
+        await pgDb.insert(schema.chatLogs).values({
+          id: cl.id,
+          provider: cl.provider,
+          senderPhoneOrUser: cl.senderPhoneOrUser,
+          senderName: cl.senderName,
+          messageText: cl.messageText,
+          replyText: cl.replyText || null,
+          timestamp: cl.timestamp,
+          isIncoming: cl.isIncoming
+        }).onConflictDoNothing();
+      }
+      
+      await pgDb.insert(schema.mikrotikConfig).values({
+        id: "default",
+        ip: DEFAULTS.mikrotik.ip,
+        username: DEFAULTS.mikrotik.username,
+        port: DEFAULTS.mikrotik.port,
+        isConnected: DEFAULTS.mikrotik.isConnected,
+        activeHotspotUsersCount: DEFAULTS.mikrotik.activeHotspotUsersCount,
+        detectedProfiles: DEFAULTS.mikrotik.detectedProfiles
+      }).onConflictDoNothing();
+
+      await pgDb.insert(schema.sanpayConfig).values({
+        id: "config",
+        apiKey: DEFAULTS.sanpayConfig.apiKey,
+        merchantId: DEFAULTS.sanpayConfig.merchantId,
+        secretKey: DEFAULTS.sanpayConfig.secretKey,
+        mode: DEFAULTS.sanpayConfig.mode,
+        enabled: DEFAULTS.sanpayConfig.enabled
+      }).onConflictDoNothing();
+
+      await pgDb.insert(schema.displayConfig).values({
+        id: "config",
+        runningText: DEFAULTS.displayConfig.runningText,
+        adsImages: DEFAULTS.displayConfig.adsImages
+      }).onConflictDoNothing();
+
+      db = JSON.parse(JSON.stringify(DEFAULTS));
+    } else {
+      console.log("[POSTGRES] Loading state from PostgreSQL...");
+      db.packages = pkgResult;
+      db.vouchers = voucherResult;
+      db.customers = customerResult;
+      db.transactions = transactionResult;
+      db.botsConfig = botResult;
+      db.chatLogs = chatResult;
+      db.mikrotik = mikrotikResult[0] ? {
+        ip: mikrotikResult[0].ip,
+        username: mikrotikResult[0].username,
+        port: mikrotikResult[0].port,
+        isConnected: mikrotikResult[0].isConnected,
+        activeHotspotUsersCount: mikrotikResult[0].activeHotspotUsersCount,
+        detectedProfiles: mikrotikResult[0].detectedProfiles as string[]
+      } : DEFAULTS.mikrotik;
+
+      db.sanpayConfig = sanpayResult[0] ? {
+        apiKey: sanpayResult[0].apiKey,
+        merchantId: sanpayResult[0].merchantId,
+        secretKey: sanpayResult[0].secretKey,
+        mode: sanpayResult[0].mode as "Simulation" | "Production",
+        enabled: sanpayResult[0].enabled
+      } : DEFAULTS.sanpayConfig;
+
+      db.displayConfig = displayResult[0] ? {
+        runningText: displayResult[0].runningText,
+        adsImages: displayResult[0].adsImages as string[]
+      } : DEFAULTS.displayConfig;
+    }
+  } catch (err) {
+    console.error("[POSTGRES] Failed to load data from PostgreSQL:", err);
+  }
+}
+
+async function saveDb() {
+  try {
+    for (const p of db.packages) {
+      await pgDb.insert(schema.packages)
+        .values(p)
+        .onConflictDoUpdate({
+          target: schema.packages.id,
+          set: {
+            name: p.name,
+            speedLimit: p.speedLimit,
+            price: p.price,
+            durationHours: p.durationHours,
+            description: p.description
+          }
+        });
+    }
+    const existingPkgs = await pgDb.select().from(schema.packages);
+    for (const ep of existingPkgs) {
+      if (!db.packages.some((p: any) => p.id === ep.id)) {
+        await pgDb.delete(schema.packages).where(eq(schema.packages.id, ep.id));
+      }
+    }
+
+    for (const v of db.vouchers) {
+      await pgDb.insert(schema.vouchers)
+        .values(v)
+        .onConflictDoUpdate({
+          target: schema.vouchers.id,
+          set: {
+            code: v.code,
+            packageId: v.packageId,
+            packageName: v.packageName,
+            price: v.price,
+            status: v.status,
+            createdAt: v.createdAt,
+            soldTo: v.soldTo || null,
+            activatedAt: v.activatedAt || null,
+            expiresAt: v.expiresAt || null
+          }
+        });
+    }
+    const existingVouchers = await pgDb.select().from(schema.vouchers);
+    for (const ev of existingVouchers) {
+      if (!db.vouchers.some((v: any) => v.id === ev.id)) {
+        await pgDb.delete(schema.vouchers).where(eq(schema.vouchers.id, ev.id));
+      }
+    }
+
+    for (const c of db.customers) {
+      await pgDb.insert(schema.customers)
+        .values(c)
+        .onConflictDoUpdate({
+          target: schema.customers.id,
+          set: {
+            name: c.name,
+            username: c.username,
+            password: c.password,
+            phone: c.phone,
+            saldo: c.saldo,
+            status: c.status,
+            joinedDate: c.joinedDate,
+            registeredVia: c.registeredVia
+          }
+        });
+    }
+    const existingCusts = await pgDb.select().from(schema.customers);
+    for (const ec of existingCusts) {
+      if (!db.customers.some((c: any) => c.id === ec.id)) {
+        await pgDb.delete(schema.customers).where(eq(schema.customers.id, ec.id));
+      }
+    }
+
+    for (const t of db.transactions) {
+      await pgDb.insert(schema.transactions)
+        .values({
+          id: t.id,
+          transactionId: t.transactionId,
+          customerId: t.customerId,
+          customerName: t.customerName,
+          type: t.type,
+          amount: t.amount,
+          uniqueCode: t.uniqueCode,
+          totalPayment: t.totalPayment,
+          status: t.status,
+          qrisPayload: t.qrisPayload,
+          note: t.note || null,
+          createdAt: t.createdAt,
+          paidAt: t.paidAt || null
+        })
+        .onConflictDoUpdate({
+          target: schema.transactions.id,
+          set: {
+            transactionId: t.transactionId,
+            customerId: t.customerId,
+            customerName: t.customerName,
+            type: t.type,
+            amount: t.amount,
+            uniqueCode: t.uniqueCode,
+            totalPayment: t.totalPayment,
+            status: t.status,
+            qrisPayload: t.qrisPayload,
+            note: t.note || null,
+            createdAt: t.createdAt,
+            paidAt: t.paidAt || null
+          }
+        });
+    }
+    const existingTxs = await pgDb.select().from(schema.transactions);
+    for (const etx of existingTxs) {
+      if (!db.transactions.some((t: any) => t.id === etx.id)) {
+        await pgDb.delete(schema.transactions).where(eq(schema.transactions.id, etx.id));
+      }
+    }
+
+    for (const b of db.botsConfig) {
+      await pgDb.insert(schema.botsConfig)
+        .values(b)
+        .onConflictDoUpdate({
+          target: schema.botsConfig.provider,
+          set: {
+            apiKey: b.apiKey,
+            botUsername: b.botUsername,
+            status: b.status,
+            welcomeMessage: b.welcomeMessage,
+            autoRepliesEnabled: b.autoRepliesEnabled
+          }
+        });
+    }
+
+    for (const cl of db.chatLogs) {
+      await pgDb.insert(schema.chatLogs)
+        .values(cl)
+        .onConflictDoUpdate({
+          target: schema.chatLogs.id,
+          set: {
+            provider: cl.provider,
+            senderPhoneOrUser: cl.senderPhoneOrUser,
+            senderName: cl.senderName,
+            messageText: cl.messageText,
+            replyText: cl.replyText,
+            timestamp: cl.timestamp,
+            isIncoming: cl.isIncoming
+          }
+        });
+    }
+    const existingChatLogs = await pgDb.select().from(schema.chatLogs);
+    for (const ec of existingChatLogs) {
+      if (!db.chatLogs.some((cl: any) => cl.id === ec.id)) {
+        await pgDb.delete(schema.chatLogs).where(eq(schema.chatLogs.id, ec.id));
+      }
+    }
+
+    await pgDb.insert(schema.mikrotikConfig)
+      .values({
+        id: "default",
+        ip: db.mikrotik.ip,
+        username: db.mikrotik.username,
+        port: db.mikrotik.port,
+        isConnected: db.mikrotik.isConnected,
+        activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount,
+        detectedProfiles: db.mikrotik.detectedProfiles
+      })
+      .onConflictDoUpdate({
+        target: schema.mikrotikConfig.id,
+        set: {
+          ip: db.mikrotik.ip,
+          username: db.mikrotik.username,
+          port: db.mikrotik.port,
+          isConnected: db.mikrotik.isConnected,
+          activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount,
+          detectedProfiles: db.mikrotik.detectedProfiles
+        }
+      });
+
+    await pgDb.insert(schema.sanpayConfig)
+      .values({
+        id: "config",
+        apiKey: db.sanpayConfig.apiKey,
+        merchantId: db.sanpayConfig.merchantId,
+        secretKey: db.sanpayConfig.secretKey,
+        mode: db.sanpayConfig.mode,
+        enabled: db.sanpayConfig.enabled
+      })
+      .onConflictDoUpdate({
+        target: schema.sanpayConfig.id,
+        set: {
+          apiKey: db.sanpayConfig.apiKey,
+          merchantId: db.sanpayConfig.merchantId,
+          secretKey: db.sanpayConfig.secretKey,
+          mode: db.sanpayConfig.mode,
+          enabled: db.sanpayConfig.enabled
+        }
+      });
+
+    await pgDb.insert(schema.displayConfig)
+      .values({
+        id: "config",
+        runningText: db.displayConfig.runningText,
+        adsImages: db.displayConfig.adsImages
+      })
+      .onConflictDoUpdate({
+        target: schema.displayConfig.id,
+        set: {
+          runningText: db.displayConfig.runningText,
+          adsImages: db.displayConfig.adsImages
+        }
+      });
+  } catch (err) {
+    console.error("[POSTGRES] Failed to save data to PostgreSQL:", err);
+  }
+}
 
 // Helper: Auto reply function for WhatsApp / Telegram simulator
 function processBotReply(provider: 'WhatsApp' | 'Telegram', sender: string, senderName: string, text: string): string {
@@ -363,6 +724,22 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+  await loadDb();
+
+  // Auto-sync middleware to PostgreSQL on any modifying REST method
+  app.use((req, res, next) => {
+    res.on("finish", async () => {
+      if (["POST", "PUT", "DELETE"].includes(req.method)) {
+        try {
+          console.log(`[POSTGRES] Auto-syncing database on ${req.method} ${req.originalUrl}...`);
+          await saveDb();
+        } catch (e) {
+          console.error(`[POSTGRES] Auto-sync error:`, e);
+        }
+      }
+    });
+    next();
+  });
 
   // 1. Return all state
   app.get("/api/all-data", (req, res) => {
@@ -686,33 +1063,32 @@ async function startServer() {
       mode: process.env.SANPAY_MODE || db.sanpayConfig?.mode || "Simulation"
     };
 
-    isRealLiveAPI = !!(config.apiKey && config.apiKey.trim().length > 5 && config.mode === "Production");
+    isRealLiveAPI = !!(config.apiKey && config.apiKey.trim().length > 5);
 
     if (isRealLiveAPI) {
       try {
-        console.log(`[SANPAY API] Melakukan request QRIS ke pay.sanpay.id dengan Key: ${config.apiKey.substring(0, 5)}***`);
+        console.log(`[SANPAY API] Melakukan request QRIS ke sanpay.site dengan Key: ${config.apiKey.substring(0, 5)}***`);
         
-        // Sign request: md5(merchantId + merchant_ref + amount + secretKey)
-        const signaturePayload = `${config.merchantId}${txId}${totalAmount}${config.secretKey || ""}`;
-        const signature = crypto.createHash("md5").update(signaturePayload).digest("hex");
+        // Prepare official compliant request payload matching official specifications
+        const bodyObj = {
+          amount: totalAmount,
+          partnerReferenceNo: txId,
+          expirySeconds: 900
+        };
 
-        const response = await fetch("https://pay.sanpay.id/api/v1/transaction/create", {
+        const rawBody = JSON.stringify(bodyObj);
+        
+        // Generate HMAC-SHA256 signature using the API Key as the secret key over the raw JSON body
+        const signature = crypto.createHmac("sha256", config.apiKey).update(rawBody).digest("hex");
+
+        const response = await fetch("https://sanpay.site/api/v1/topup_qris", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${config.apiKey}`,
-            "key": config.apiKey
+            "X-Merchant-Code": config.merchantId,
+            "X-Signature": signature
           },
-          body: JSON.stringify({
-            merchant_id: config.merchantId,
-            merchant_ref: txId,
-            amount: totalAmount,
-            method: "qris",
-            customer_name: customerName || "Guest",
-            notes: note,
-            signature: signature,
-            callback_url: `${req.headers.origin || "https://ais-dev-snixnu3n6foxgmccf6cg3r-775470456595.asia-east1.run.app"}/api/qris/webhook`
-          })
+          body: rawBody
         });
 
         const responseText = await response.text();
@@ -732,11 +1108,12 @@ async function startServer() {
         };
 
         if (response.ok) {
-          if (apiData && (apiData.qris_data || apiData.qr_string || apiData.qris_payload || apiData.qr_data)) {
-            qrisPayload = apiData.qris_data || apiData.qr_string || apiData.qris_payload || apiData.qr_data;
+          if (apiData && (apiData.qrContent || apiData.qris_data || apiData.qr_string || apiData.qris_payload || apiData.qr_data)) {
+            qrisPayload = apiData.qrContent || apiData.qris_data || apiData.qr_string || apiData.qris_payload || apiData.qr_data;
             console.log("[SANPAY API] Sukses Mendapatkan data QRIS dari Sanpay!");
-          } else if (apiData && apiData.data && (apiData.data.qris_data || apiData.data.qr_string || apiData.data.qris_payload || apiData.data.qr_code)) {
-            qrisPayload = apiData.data.qris_data || apiData.data.qr_string || apiData.data.qris_payload || apiData.data.qr_code;
+          } else if (apiData && apiData.data && (apiData.data.qrContent || apiData.data.qris_data || apiData.data.qr_string || apiData.data.qris_payload || apiData.data.qr_code)) {
+            qrisPayload = apiData.data.qrContent || apiData.data.qris_data || apiData.data.qr_string || apiData.data.qris_payload || apiData.data.qr_code;
+            console.log("[SANPAY API] Sukses Mendapatkan data QRIS dari Sanpay!");
           }
         } else {
           console.warn(`[SANPAY API] Sanpay mengembalikan status error ${response.status}:`, responseText);
@@ -805,25 +1182,39 @@ async function startServer() {
       mode: process.env.SANPAY_MODE || db.sanpayConfig?.mode || "Simulation"
     };
 
-    isRealLiveAPI = !!(config.apiKey && config.mode === "Production");
+    isRealLiveAPI = !!(config.apiKey && config.apiKey.trim().length > 5);
 
     if (isRealLiveAPI) {
       isLiveChecked = true;
       try {
-        const response = await fetch(`https://pay.sanpay.id/api/v1/transaction/status?merchant_ref=${tx.transactionId}`, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${config.apiKey}`,
-            "key": config.apiKey
-          }
+        console.log(`[SANPAY API] Mengecek riwayat mutasi dari sanpay.site...`);
+        const response = await fetch(`https://sanpay.site/api/v1/get_mutasi?apikey=${config.apiKey}&merchant_code=${config.merchantId}`, {
+          method: "GET"
         });
 
         if (response.ok) {
           const apiData = (await response.json()) as any;
           apiStatusResponse = apiData;
-          const statusVal = (apiData.status || apiData.payment_status || (apiData.data && apiData.data.status) || "").toUpperCase();
-          if (statusVal === "PAID" || statusVal === "SUCCESS" || statusVal === "SUCCESSFUL" || statusVal === "LUNAS") {
-            paymentVerified = true;
+          
+          // Identify array of mutations (could be top level or inside data field)
+          const mutations = Array.isArray(apiData) ? apiData : (apiData.data || apiData.mutations || apiData.mutasi || []);
+          
+          if (Array.isArray(mutations)) {
+            // Locate transaction matching reference string or unique amount
+            const matchedMutation = mutations.find((m: any) => {
+              const mRef = (m.transactionID || m.partnerReferenceNo || m.ref_id || m.merchant_ref || m.reference || m.code || m.id || "").toString().toLowerCase();
+              const mAmount = parseInt(m.amount || m.nominal || m.credit || m.amount_paid || "0");
+              
+              const isRefMatch = tx.transactionId.toLowerCase() === mRef || tx.id.toLowerCase() === mRef;
+              const isAmountMatch = tx.totalPayment === mAmount;
+              
+              return isRefMatch || isAmountMatch;
+            });
+            
+            if (matchedMutation) {
+              paymentVerified = true;
+              console.log(`[SANPAY API] Transaksi ${tx.transactionId} terverifikasi lunas di get_mutasi bursa.`);
+            }
           }
         }
       } catch (err: any) {
@@ -915,11 +1306,11 @@ async function startServer() {
       body: req.body
     };
 
-    const transactionId = req.body.transactionId || req.body.transaction_id || req.body.merchant_ref || req.body.reference || req.body.id || req.body.txId;
+    const transactionId = req.body.partnerReferenceNo || req.body.transactionId || req.body.transaction_id || req.body.merchant_ref || req.body.reference || req.body.id || req.body.txId;
     const status = req.body.status || req.body.payment_status || req.body.paymentStatus || req.body.status_pembayaran;
 
     if (!transactionId) {
-      return res.status(400).json({ success: false, message: "Kunci identifikasi transaksi (transactionId atau transaction_id) kosong atau tidak terkirim." });
+      return res.status(400).json({ success: false, message: "Kunci identifikasi transaksi (partnerReferenceNo, transactionId atau merchant_ref) kosong atau tidak terkirim." });
     }
 
     const txIndex = db.transactions.findIndex((t: QrisTransaction) => t.transactionId === transactionId || t.id === transactionId);
