@@ -1,0 +1,14 @@
+# Ignore local node_modules and build outputs
+node_modules
+dist
+.env
+.env.local
+.env.production
+.git
+.github
+Dockerfile
+.dockerignore
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
