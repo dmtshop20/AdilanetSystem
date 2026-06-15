@@ -1,0 +1,6 @@
+{
+  "name": "Adila.Net WiFi Voucher",
+  "description": "Sistem Penjualan Voucher WiFi RTRW-NET Terintegrasi Sanpay.id, Bot WhatsApp & Telegram, dan Portal Saldo Pelanggan",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
