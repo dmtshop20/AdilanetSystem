@@ -9,7 +9,8 @@ import {
   ArrowRight,
   TrendingUp,
   Receipt,
-  MessageSquare
+  MessageSquare,
+  Database
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -30,6 +31,16 @@ interface Props {
   botsConfig: BotSetting[];
   mikrotik: MikrotikConfig;
   onNavigate: (tab: string) => void;
+  dbStatus?: {
+    connected: boolean;
+    error: string | null;
+    loadedFrom: string;
+    timestamp: string | null;
+    sql_host?: string;
+    sql_user?: string;
+    sql_db?: string;
+    sql_port?: string;
+  };
 }
 
 export default function DashboardOverview({
@@ -39,7 +50,8 @@ export default function DashboardOverview({
   transactions,
   botsConfig,
   mikrotik,
-  onNavigate
+  onNavigate,
+  dbStatus
 }: Props) {
   // Stats calculations
   const totalCustomers = customers.length;
@@ -76,6 +88,72 @@ export default function DashboardOverview({
 
   return (
     <div className="space-y-6">
+      {/* Database Connection Status Diagnostics */}
+      {dbStatus && (
+        <div id="db-status-banner" className={`p-5 rounded-2xl border ${
+          dbStatus.connected 
+            ? 'bg-emerald-50/40 border-emerald-100 text-emerald-950 dark:bg-emerald-950/10 dark:border-emerald-900/40 dark:text-emerald-300' 
+            : 'bg-rose-50 border-rose-100/80 text-rose-950 dark:bg-rose-955/10 dark:border-rose-900/40 dark:text-rose-300'
+        }`}>
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className={`p-2.5 rounded-xl ${dbStatus.connected ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white animate-pulse'}`}>
+                <Database size={20} />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold flex items-center gap-2">
+                  <span>Status Database MySQL:</span>
+                  <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase ${
+                    dbStatus.connected 
+                      ? 'bg-emerald-100 text-emerald-800' 
+                      : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {dbStatus.connected ? "Terkoneksi" : "Terputus (Mode Fallback Memori)"}
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Penyimpanan Aktif: <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{dbStatus.loadedFrom}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-4 gap-y-1 bg-slate-100/50 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-150/40">
+              <span>Host: <strong className="text-slate-800 dark:text-slate-300 font-semibold">{dbStatus.sql_host}</strong></span>
+              <span>Port: <strong className="text-slate-800 dark:text-slate-300 font-semibold">{dbStatus.sql_port}</strong></span>
+              <span>DB: <strong className="text-slate-800 dark:text-slate-300 font-semibold">{dbStatus.sql_db}</strong></span>
+              <span>User: <strong className="text-slate-800 dark:text-slate-300 font-semibold">{dbStatus.sql_user}</strong></span>
+            </div>
+          </div>
+
+          {!dbStatus.connected && (
+            <div className="mt-4 pt-4 border-t border-rose-100 dark:border-rose-900/30 space-y-3">
+              <div className="p-3 bg-rose-100/30 dark:bg-rose-955/30 rounded-xl text-xs font-mono text-rose-700 dark:text-rose-400 overflow-x-auto border border-rose-150/20">
+                <span className="font-bold block text-rose-800 dark:text-rose-300 mb-1">Pesan Error Database:</span>
+                {dbStatus.error || "Gagal menghubungi database MariaDB."}
+              </div>
+
+              <div className="text-xs space-y-2">
+                <span className="font-bold text-slate-700 dark:text-slate-300">💡 Langkah-Langkah Diagnosa & Solusi:</span>
+                <ul className="list-decimal pl-5 space-y-1 text-slate-600 dark:text-slate-400 leading-relaxed md:text-justify">
+                  <li>
+                    <strong>Sandi Root Tidak Sesuai (Access Denied):</strong> Jika Anda belum menyetel password root untuk database MariaDB di Dockge, maka parameter <strong>SQL_PASSWORD</strong> di file <code>docker-compose.yml</code> harus dikosongkan (contoh: <code>- SQL_PASSWORD=</code>).
+                  </li>
+                  <li>
+                    <strong>Nama Host Mismatch (ENOTFOUND/ECONNREFUSED):</strong> Pastikan nama kontainer database Anda adalah <code>mariadb</code>. Jika pada konfigurasi Dockge Anda nama kontainer database-nya berbeda (misalnya <code>database</code>), ubahlah parameter <code>- SQL_HOST=mariadb</code> menjadi <code>- SQL_HOST=database</code> di file <code>docker-compose.yml</code>.
+                  </li>
+                  <li>
+                    <strong>Docker Network Group:</strong> Hubungkan kedua kontainer ke Docker Network yang sama. Di file <code>docker-compose.yml</code> Anda menggunakan network eksternal bernama <code>mikhmon_network</code>. Pastikan kontainer MariaDB Anda juga sudah terhubung ke network eksternal <code>mikhmon_network</code> tersebut!
+                  </li>
+                </ul>
+                <div className="pt-2 select-all font-mono text-[10px] bg-slate-50 dark:bg-indigo-950/20 p-2.5 rounded-lg border border-slate-150 dark:border-indigo-900/30 text-slate-500 leading-relaxed">
+                  Tips: Setelah mengedit file <code>docker-compose.yml</code> di Dockge, tekan tombol <strong className="text-indigo-650 dark:text-indigo-400">Deploy</strong> atau simpan kembali konfigurasi agar sistem hot-reloading memicu koneksi yang baru!
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Metrics Banner */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1: Voucher Stock & Sold */}

@@ -68,6 +68,12 @@ export default function App() {
     runningText: "Selamat datang di Wi-Fi Hotspot Kami! Nikmati internet cepat dan stabil. Beli paket sekarang juga!",
     adsImages: []
   });
+  const [dbStatus, setDbStatus] = useState<any>({
+    connected: false,
+    error: null,
+    loadedFrom: "Memory (Fallback)",
+    timestamp: null
+  });
 
   // Client session for Customer Portal
   const [currentCustomer, setCurrentCustomer] = useState<CustomerAccount | null>(null);
@@ -139,6 +145,9 @@ export default function App() {
         });
         if (data.displayConfig) {
           setDisplayConfig(data.displayConfig);
+        }
+        if (data.dbStatus) {
+          setDbStatus(data.dbStatus);
         }
 
         // Maintain client session sync if logged in
@@ -1083,6 +1092,7 @@ export default function App() {
               transactions={transactions}
               botsConfig={botsConfig}
               mikrotik={mikrotik}
+              dbStatus={dbStatus}
               onNavigate={(tab) => {
                 setActiveTab(tab);
                 setSelectedTxId(null);

@@ -4,7 +4,7 @@ services:
   # Web Application Service (Hotspot QRIS)
   app:
     build:
-      context: .
+      context: https://github.com/dmtshop20/AdilanetSystem.git#main
       dockerfile: Dockerfile
     container_name: hotspot_qris_app
     restart: always
@@ -13,12 +13,17 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - SQL_HOST=172.17.0.1  # Ganti dengan IP database MariaDB Anda (atau nama service docker database jika di network yang sama)
+      - SQL_HOST=mariadb
       - SQL_PORT=3306
       - SQL_USER=root
       - SQL_PASSWORD=MySecurePassword123!
       - SQL_ADMIN_USER=root
       - SQL_ADMIN_PASSWORD=MySecurePassword123!
       - SQL_DB_NAME=hotspot_db
-      - SANPAY_MODE=Production  # Ganti ke Simulation jika ingin test pembayaran simulasi QRIS tanpa dana asli
+      - SANPAY_MODE=Simulation
+    networks:
+      - mikhmon_network
 
+networks:
+  mikhmon_network:
+    external: true

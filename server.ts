@@ -175,6 +175,17 @@ const DEFAULTS = {
 // Local storage model
 let db = JSON.parse(JSON.stringify(DEFAULTS));
 
+let dbStatus = {
+  connected: false,
+  error: null as string | null,
+  loadedFrom: "Memory (Fallback)",
+  timestamp: null as string | null,
+  sql_host: process.env.SQL_HOST || "not set",
+  sql_user: process.env.SQL_USER || "not set",
+  sql_db: process.env.SQL_DB_NAME || "not set",
+  sql_port: process.env.SQL_PORT || "not set"
+};
+
 async function loadDb() {
   try {
     const pkgResult = await pgDb.select().from(schema.packages);
@@ -186,6 +197,12 @@ async function loadDb() {
     const mikrotikResult = await pgDb.select().from(schema.mikrotikConfig);
     const sanpayResult = await pgDb.select().from(schema.sanpayConfig);
     const displayResult = await pgDb.select().from(schema.displayConfig);
+
+    // Database successfully connected and read
+    dbStatus.connected = true;
+    dbStatus.error = null;
+    dbStatus.loadedFrom = "MySQL Database";
+    dbStatus.timestamp = new Date().toISOString();
 
     if (pkgResult.length === 0) {
       console.log("[MYSQL] DB is empty. Seeding defaults...");
@@ -316,8 +333,12 @@ async function loadDb() {
         adsImages: displayResult[0].adsImages as string[]
       } : DEFAULTS.displayConfig;
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error("[MYSQL] Failed to load data from MySQL:", err);
+    dbStatus.connected = false;
+    dbStatus.error = err?.message || String(err);
+    dbStatus.loadedFrom = "Memory (Fallback due to connection error)";
+    dbStatus.timestamp = new Date().toISOString();
   }
 }
 
@@ -734,7 +755,10 @@ async function startServer() {
 
   // 1. Return all state
   app.get("/api/all-data", (req, res) => {
-    res.json(db);
+    res.json({
+      ...db,
+      dbStatus: dbStatus
+    });
   });
 
   // 2. Clear & Reset DB State
