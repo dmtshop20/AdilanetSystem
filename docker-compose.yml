@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. Web Application Service (Hotspot QRIS)
+  # Web Application Service (Hotspot QRIS)
   app:
     build:
       context: .
@@ -13,50 +13,12 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - SQL_HOST=db
+      - SQL_HOST=172.17.0.1  # Ganti dengan IP database MariaDB Anda (atau nama service docker database jika di network yang sama)
       - SQL_PORT=3306
       - SQL_USER=root
       - SQL_PASSWORD=MySecurePassword123!
       - SQL_ADMIN_USER=root
       - SQL_ADMIN_PASSWORD=MySecurePassword123!
       - SQL_DB_NAME=hotspot_db
-      - SANPAY_MODE=Production  # Change to Simulation to test QRIS without real payments
-    depends_on:
-      db:
-        condition: service_healthy
+      - SANPAY_MODE=Production  # Ganti ke Simulation jika ingin test pembayaran simulasi QRIS tanpa dana asli
 
-  # 2. MySQL Database Service
-  db:
-    image: mysql:8.0
-    container_name: hotspot_mysql_db
-    restart: always
-    environment:
-      - MYSQL_ROOT_PASSWORD=MySecurePassword123!
-      - MYSQL_DATABASE=hotspot_db
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pMySecurePassword123!"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  # 3. phpMyAdmin Manager (As per your request to manage via phpMyAdmin)
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin:latest
-    container_name: hotspot_db_phpmyadmin
-    restart: always
-    ports:
-      - "8080:80"
-    environment:
-      - PMA_HOST=db
-      - PMA_PORT=3306
-      - PMA_USER=root
-      - PMA_PASSWORD=MySecurePassword123!
-    depends_on:
-      - db
-
-volumes:
-  mysql_data:
