@@ -188,13 +188,13 @@ async function loadDb() {
     const displayResult = await pgDb.select().from(schema.displayConfig);
 
     if (pkgResult.length === 0) {
-      console.log("[POSTGRES] DB is empty. Seeding defaults...");
+      console.log("[MYSQL] DB is empty. Seeding defaults...");
       
       for (const p of DEFAULTS.packages) {
-        await pgDb.insert(schema.packages).values(p).onConflictDoNothing();
+        await pgDb.insert(schema.packages).ignore().values(p);
       }
       for (const v of DEFAULTS.vouchers) {
-        await pgDb.insert(schema.vouchers).values({
+        await pgDb.insert(schema.vouchers).ignore().values({
           id: v.id,
           code: v.code,
           packageId: v.packageId,
@@ -205,10 +205,10 @@ async function loadDb() {
           soldTo: v.soldTo || null,
           activatedAt: v.activatedAt || null,
           expiresAt: v.expiresAt || null
-        }).onConflictDoNothing();
+        });
       }
       for (const c of DEFAULTS.customers) {
-        await pgDb.insert(schema.customers).values({
+        await pgDb.insert(schema.customers).ignore().values({
           id: c.id,
           name: c.name,
           username: c.username,
@@ -218,10 +218,10 @@ async function loadDb() {
           status: c.status,
           joinedDate: c.joinedDate,
           registeredVia: c.registeredVia
-        }).onConflictDoNothing();
+        });
       }
       for (const t of DEFAULTS.transactions) {
-        await pgDb.insert(schema.transactions).values({
+        await pgDb.insert(schema.transactions).ignore().values({
           id: t.id,
           transactionId: t.transactionId,
           customerId: t.customerId || "guest",
@@ -235,20 +235,20 @@ async function loadDb() {
           note: t.note || null,
           createdAt: t.createdAt,
           paidAt: t.paidAt || null
-        }).onConflictDoNothing();
+        });
       }
       for (const b of DEFAULTS.botsConfig) {
-        await pgDb.insert(schema.botsConfig).values({
+        await pgDb.insert(schema.botsConfig).ignore().values({
           provider: b.provider,
           apiKey: b.apiKey,
           botUsername: b.botUsername || null,
           status: b.status,
           welcomeMessage: b.welcomeMessage,
           autoRepliesEnabled: b.autoRepliesEnabled
-        }).onConflictDoNothing();
+        });
       }
       for (const cl of DEFAULTS.chatLogs) {
-        await pgDb.insert(schema.chatLogs).values({
+        await pgDb.insert(schema.chatLogs).ignore().values({
           id: cl.id,
           provider: cl.provider,
           senderPhoneOrUser: cl.senderPhoneOrUser,
@@ -257,10 +257,10 @@ async function loadDb() {
           replyText: cl.replyText || null,
           timestamp: cl.timestamp,
           isIncoming: cl.isIncoming
-        }).onConflictDoNothing();
+        });
       }
       
-      await pgDb.insert(schema.mikrotikConfig).values({
+      await pgDb.insert(schema.mikrotikConfig).ignore().values({
         id: "default",
         ip: DEFAULTS.mikrotik.ip,
         username: DEFAULTS.mikrotik.username,
@@ -268,26 +268,26 @@ async function loadDb() {
         isConnected: DEFAULTS.mikrotik.isConnected,
         activeHotspotUsersCount: DEFAULTS.mikrotik.activeHotspotUsersCount,
         detectedProfiles: DEFAULTS.mikrotik.detectedProfiles
-      }).onConflictDoNothing();
+      });
 
-      await pgDb.insert(schema.sanpayConfig).values({
+      await pgDb.insert(schema.sanpayConfig).ignore().values({
         id: "config",
         apiKey: DEFAULTS.sanpayConfig.apiKey,
         merchantId: DEFAULTS.sanpayConfig.merchantId,
         secretKey: DEFAULTS.sanpayConfig.secretKey,
         mode: DEFAULTS.sanpayConfig.mode,
         enabled: DEFAULTS.sanpayConfig.enabled
-      }).onConflictDoNothing();
+      });
 
-      await pgDb.insert(schema.displayConfig).values({
+      await pgDb.insert(schema.displayConfig).ignore().values({
         id: "config",
         runningText: DEFAULTS.displayConfig.runningText,
         adsImages: DEFAULTS.displayConfig.adsImages
-      }).onConflictDoNothing();
+      });
 
       db = JSON.parse(JSON.stringify(DEFAULTS));
     } else {
-      console.log("[POSTGRES] Loading state from PostgreSQL...");
+      console.log("[MYSQL] Loading state from MySQL...");
       db.packages = pkgResult;
       db.vouchers = voucherResult;
       db.customers = customerResult;
@@ -317,7 +317,7 @@ async function loadDb() {
       } : DEFAULTS.displayConfig;
     }
   } catch (err) {
-    console.error("[POSTGRES] Failed to load data from PostgreSQL:", err);
+    console.error("[MYSQL] Failed to load data from MySQL:", err);
   }
 }
 
@@ -326,8 +326,7 @@ async function saveDb() {
     for (const p of db.packages) {
       await pgDb.insert(schema.packages)
         .values(p)
-        .onConflictDoUpdate({
-          target: schema.packages.id,
+        .onDuplicateKeyUpdate({
           set: {
             name: p.name,
             speedLimit: p.speedLimit,
@@ -347,8 +346,7 @@ async function saveDb() {
     for (const v of db.vouchers) {
       await pgDb.insert(schema.vouchers)
         .values(v)
-        .onConflictDoUpdate({
-          target: schema.vouchers.id,
+        .onDuplicateKeyUpdate({
           set: {
             code: v.code,
             packageId: v.packageId,
@@ -372,8 +370,7 @@ async function saveDb() {
     for (const c of db.customers) {
       await pgDb.insert(schema.customers)
         .values(c)
-        .onConflictDoUpdate({
-          target: schema.customers.id,
+        .onDuplicateKeyUpdate({
           set: {
             name: c.name,
             username: c.username,
@@ -410,8 +407,7 @@ async function saveDb() {
           createdAt: t.createdAt,
           paidAt: t.paidAt || null
         })
-        .onConflictDoUpdate({
-          target: schema.transactions.id,
+        .onDuplicateKeyUpdate({
           set: {
             transactionId: t.transactionId,
             customerId: t.customerId,
@@ -438,8 +434,7 @@ async function saveDb() {
     for (const b of db.botsConfig) {
       await pgDb.insert(schema.botsConfig)
         .values(b)
-        .onConflictDoUpdate({
-          target: schema.botsConfig.provider,
+        .onDuplicateKeyUpdate({
           set: {
             apiKey: b.apiKey,
             botUsername: b.botUsername,
@@ -453,8 +448,7 @@ async function saveDb() {
     for (const cl of db.chatLogs) {
       await pgDb.insert(schema.chatLogs)
         .values(cl)
-        .onConflictDoUpdate({
-          target: schema.chatLogs.id,
+        .onDuplicateKeyUpdate({
           set: {
             provider: cl.provider,
             senderPhoneOrUser: cl.senderPhoneOrUser,
@@ -483,8 +477,7 @@ async function saveDb() {
         activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount,
         detectedProfiles: db.mikrotik.detectedProfiles
       })
-      .onConflictDoUpdate({
-        target: schema.mikrotikConfig.id,
+      .onDuplicateKeyUpdate({
         set: {
           ip: db.mikrotik.ip,
           username: db.mikrotik.username,
@@ -504,8 +497,7 @@ async function saveDb() {
         mode: db.sanpayConfig.mode,
         enabled: db.sanpayConfig.enabled
       })
-      .onConflictDoUpdate({
-        target: schema.sanpayConfig.id,
+      .onDuplicateKeyUpdate({
         set: {
           apiKey: db.sanpayConfig.apiKey,
           merchantId: db.sanpayConfig.merchantId,
@@ -521,15 +513,14 @@ async function saveDb() {
         runningText: db.displayConfig.runningText,
         adsImages: db.displayConfig.adsImages
       })
-      .onConflictDoUpdate({
-        target: schema.displayConfig.id,
+      .onDuplicateKeyUpdate({
         set: {
           runningText: db.displayConfig.runningText,
           adsImages: db.displayConfig.adsImages
         }
       });
   } catch (err) {
-    console.error("[POSTGRES] Failed to save data to PostgreSQL:", err);
+    console.error("[MYSQL] Failed to save data to MySQL:", err);
   }
 }
 
@@ -726,15 +717,15 @@ async function startServer() {
   app.use(express.json());
   await loadDb();
 
-  // Auto-sync middleware to PostgreSQL on any modifying REST method
+  // Auto-sync middleware to MySQL on any modifying REST method
   app.use((req, res, next) => {
     res.on("finish", async () => {
       if (["POST", "PUT", "DELETE"].includes(req.method)) {
         try {
-          console.log(`[POSTGRES] Auto-syncing database on ${req.method} ${req.originalUrl}...`);
+          console.log(`[MYSQL] Auto-syncing database on ${req.method} ${req.originalUrl}...`);
           await saveDb();
         } catch (e) {
-          console.error(`[POSTGRES] Auto-sync error:`, e);
+          console.error(`[MYSQL] Auto-sync error:`, e);
         }
       }
     });

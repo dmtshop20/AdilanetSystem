@@ -24,14 +24,13 @@ if (!password) {
 export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./drizzle",
-  dialect: "postgresql",
-  schemaFilter: ["public"],
+  dialect: "mysql",
   dbCredentials: {
     host: sqlHost,
+    port: parseInt(process.env.SQL_PORT || "3306"),
     user: user,
     password: password,
     database: sqlDbName,
-    ssl: false,
   },
   verbose: true,
 });
