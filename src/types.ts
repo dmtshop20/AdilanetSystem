@@ -1,4 +1,4 @@
-export type VoucherStatus = 'Available' | 'Sold' | 'Active' | 'Expired';
+export type VoucherStatus = "Available" | "Sold" | "Active" | "Expired";
 
 export interface VoucherPackage {
   id: string;
@@ -30,13 +30,13 @@ export interface CustomerAccount {
   password?: string; // Optional registered password for secure login
   phone: string;
   saldo: number; // Stored balance in Rupiah
-  status: 'Active' | 'Suspended';
+  status: "Active" | "Suspended";
   joinedDate: string;
-  registeredVia: 'Admin' | 'WebPortal';
+  registeredVia: "Admin" | "WebPortal";
 }
 
-export type TransactionType = 'Topup' | 'DirectBuy';
-export type TransactionStatus = 'Pending' | 'Paid' | 'Expired';
+export type TransactionType = "Topup" | "DirectBuy";
+export type TransactionStatus = "Pending" | "Paid" | "Expired";
 
 export interface QrisTransaction {
   id: string;
@@ -56,17 +56,17 @@ export interface QrisTransaction {
 }
 
 export interface BotSetting {
-  provider: 'WhatsApp' | 'Telegram';
+  provider: "WhatsApp" | "Telegram";
   apiKey: string;
   botUsername?: string; // e.g. @RtrwWifiVoucherBot
-  status: 'Connected' | 'Disconnected' | 'Connecting';
+  status: "Connected" | "Disconnected" | "Connecting";
   welcomeMessage: string;
   autoRepliesEnabled: boolean;
 }
 
 export interface ChatSimMessage {
   id: string;
-  provider: 'WhatsApp' | 'Telegram';
+  provider: "WhatsApp" | "Telegram";
   senderPhoneOrUser: string;
   senderName: string;
   messageText: string;
@@ -88,7 +88,7 @@ export interface MikrotikConfig {
 export interface QrislyConfig {
   apiKey: string;
   merchantId: string;
-  mode: 'Simulation' | 'Production';
+  mode: "Simulation" | "Production";
   autoCheckInterval: number;
   enabled: boolean;
 }
@@ -97,7 +97,7 @@ export interface SanpayConfig {
   apiKey: string;
   merchantId: string;
   secretKey: string;
-  mode: 'Simulation' | 'Production';
+  mode: "Simulation" | "Production";
   enabled: boolean;
 }
 
@@ -106,4 +106,3 @@ export interface AppDisplayConfig {
   adsImages: string[];
   adminPassword?: string;
 }
-

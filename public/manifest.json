@@ -1,0 +1,17 @@
+{
+  "name": "Adila Net",
+  "short_name": "Adila",
+  "description": "Aplikasi Menu Hotspot MikroTik",
+  "start_url": "/portal",
+  "display": "standalone",
+  "background_color": "#1E3A8A",
+  "theme_color": "#1E3A8A",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=adila&backgroundColor=1e3a8a",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

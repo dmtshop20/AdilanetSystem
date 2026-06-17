@@ -1,6 +1,6 @@
-import { drizzle } from 'drizzle-orm/mysql2';
-import mysql from 'mysql2/promise';
-import * as schema from './schema.ts';
+import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
+import * as schema from "./schema.ts";
 
 // Function to create a new connection pool.
 export const createPool = () => {
@@ -20,4 +20,4 @@ export const createPool = () => {
 export const pool = createPool();
 
 // Initialize Drizzle with the pool and schema.
-export const db = drizzle(pool, { schema, mode: 'default' });
+export const db = drizzle(pool, { schema, mode: "default" });

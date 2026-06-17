@@ -1,4 +1,12 @@
-import { mysqlTable, varchar, text, int, boolean, timestamp, json } from "drizzle-orm/mysql-core";
+import {
+  mysqlTable,
+  varchar,
+  text,
+  int,
+  boolean,
+  timestamp,
+  json,
+} from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: varchar("id", { length: 255 }).primaryKey(),
@@ -83,7 +91,9 @@ export const mikrotikConfig = mysqlTable("mikrotik_config", {
   password: varchar("password", { length: 255 }).notNull().default(""),
   port: int("port").notNull(),
   isConnected: boolean("is_connected").notNull().default(false),
-  activeHotspotUsersCount: int("active_hotspot_users_count").notNull().default(0),
+  activeHotspotUsersCount: int("active_hotspot_users_count")
+    .notNull()
+    .default(0),
   detectedProfiles: json("detected_profiles").notNull(), // array of strings
 });
 
@@ -100,5 +110,7 @@ export const displayConfig = mysqlTable("display_config", {
   id: varchar("id", { length: 255 }).primaryKey(), // "config"
   runningText: text("running_text").notNull(),
   adsImages: json("ads_images").notNull(), // array of strings
-  adminPassword: varchar("admin_password", { length: 255 }).notNull().default("admin"),
+  adminPassword: varchar("admin_password", { length: 255 })
+    .notNull()
+    .default("admin"),
 });

@@ -1205,31 +1205,52 @@ async function startServer() {
     res.json({ success: true, message: "Pelanggan terhapus", customers: db.customers });
   });
 
-  // Customer portal authentication API
-  app.post("/api/customers/portal/login", (req, res) => {
+  // Unified Authentication API
+  app.post("/api/auth/login", (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
-      return res.status(400).json({ success: false, message: "Nama pengguna dan kata sandi wajib diisi" });
+      return res.status(400).json({ success: false, error: "Username dan password wajib diisi" });
     }
 
+    // Check if it's Admin
     const userNorm = username.trim().toLowerCase();
+    
+    // Quick Admin check
+    if (userNorm === "admin" || userNorm === "administrator") {
+      const correctPassword = db.displayConfig?.adminPassword || "admin";
+      if (password === correctPassword) {
+        return res.json({ 
+          success: true, 
+          role: "admin", 
+          user: { id: "admin", name: "Administrator", role: "admin" } 
+        });
+      } else {
+        return res.status(401).json({ success: false, error: "Password admin salah" });
+      }
+    }
+
+    // Otherwise, check customer database
     const customer = db.customers.find((c: CustomerAccount) => c.username === userNorm || c.phone === userNorm);
     
     if (customer) {
-      if (customer.status === "Suspended") {
-        return res.status(403).json({ success: false, message: "Akun Anda dinonaktifkan sementara" });
+      if (customer.status === "Suspended" || customer.status === "Inactive") {
+        return res.status(403).json({ success: false, error: "Akun Anda dinonaktifkan." });
       }
       
-      // Secure password check (with fallback for legacy seeds)
       const isPasswordCorrect = !customer.password || customer.password === password;
       if (!isPasswordCorrect) {
-        return res.status(401).json({ success: false, message: "Kata sandi yang Anda masukkan salah" });
+        return res.status(401).json({ success: false, error: "Kredensial atau password pelanggan salah." });
       }
 
-      res.json({ success: true, customer });
-    } else {
-      res.status(404).json({ success: false, message: "Akun tidak ditemukan atau kata sandi tidak cocok. Silakan lakukan Registrasi Baru." });
+      return res.json({ success: true, role: "customer", user: customer });
     }
+
+    return res.status(404).json({ success: false, error: "Username tidak ditemukan." });
+  });
+
+  app.post("/api/customers/portal/login", (req, res) => {
+    // Keep legacy for existing connections if they reload, but route back to unified
+    res.status(400).json({ success: false, message: "Use /api/auth/login" });
   });
 
   app.post("/api/customers/portal/register", (req, res) => {
@@ -1893,6 +1914,32 @@ async function startServer() {
     const client = new MikrotikAPIClient();
     const success = await client.deleteHotspotUser(username);
     res.json({ success: true, deletedOnRealRouter: success });
+  });
+
+  // Fetch real active users
+  app.get("/api/mikrotik/active-users", async (req, res) => {
+    try {
+      if (!db.mikrotik.isConnected) {
+        return res.json({ success: true, users: [] }); // return empty if disconnected
+      }
+      const client = new MikrotikAPIClient();
+      const conn = (client as any).createConnection();
+      await conn.connect();
+      const activeRes = await conn.write("/ip/hotspot/active/print");
+      conn.close();
+      const activeUsers = activeRes.map((u: any) => ({
+        id: u[".id"],
+        username: u["user"],
+        ipAddress: u["address"],
+        macAddress: u["mac-address"] || "Unknown",
+        uptime: u["uptime"] || "0s",
+        server: u["server"],
+        loginBy: u["login-by"] || ""
+      }));
+      res.json({ success: true, users: activeUsers });
+    } catch (err: any) {
+      res.json({ success: false, error: err.message, users: [] });
+    }
   });
 
   // Standard express Vite wrapper fallback integration
