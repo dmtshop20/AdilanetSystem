@@ -171,15 +171,16 @@ export default function App() {
 
   // API 1: Reset System to defaults
   const handleResetSystemState = async () => {
-    if (confirm("Apakah Anda yakin ingin menyetel ulang seluruh database wifi hotspot kembalian default?")) {
+    if (confirm("Apakah Anda yakin ingin mengosongkan seluruh data paket, voucher hotspot, member, dan transaksi? Konfigurasi penting seperti IP MikroTik dan metode pembayaran Sanpay akan tetap aman.")) {
       setIsLoading(true);
       try {
         const res = await fetch("/api/reset", { method: "POST" });
         if (res.ok) {
+          const data = await res.json();
           setCurrentCustomer(null);
           setSelectedTxId(null);
           await fetchAllData();
-          alert("Database disetel ulang sukses!");
+          alert(data.message || "Database berhasil dikosongkan seutuhnya!");
         }
       } catch (err) {
         console.error(err);

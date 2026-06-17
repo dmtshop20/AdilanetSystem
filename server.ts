@@ -232,79 +232,16 @@ async function loadDb() {
     dbStatus.loadedFrom = "MySQL Database";
     dbStatus.timestamp = new Date().toISOString();
 
-    if (pkgResult.length === 0) {
-      console.log("[MYSQL] DB is empty. Seeding defaults...");
-      
-      for (const p of DEFAULTS.packages) {
-        await pgDb.insert(schema.packages).ignore().values(p);
-      }
-      for (const v of DEFAULTS.vouchers) {
-        await pgDb.insert(schema.vouchers).ignore().values({
-          id: v.id,
-          code: v.code,
-          packageId: v.packageId,
-          packageName: v.packageName,
-          price: v.price,
-          status: v.status,
-          createdAt: v.createdAt,
-          soldTo: v.soldTo || null,
-          activatedAt: v.activatedAt || null,
-          expiresAt: v.expiresAt || null
-        });
-      }
-      for (const c of DEFAULTS.customers) {
-        await pgDb.insert(schema.customers).ignore().values({
-          id: c.id,
-          name: c.name,
-          username: c.username,
-          password: c.password || null,
-          phone: c.phone,
-          saldo: c.saldo,
-          status: c.status,
-          joinedDate: c.joinedDate,
-          registeredVia: c.registeredVia
-        });
-      }
-      for (const t of DEFAULTS.transactions) {
-        await pgDb.insert(schema.transactions).ignore().values({
-          id: t.id,
-          transactionId: t.transactionId,
-          customerId: t.customerId || "guest",
-          customerName: t.customerName,
-          type: t.type,
-          amount: t.amount,
-          uniqueCode: t.uniqueCode,
-          totalPayment: t.totalPayment,
-          status: t.status,
-          qrisPayload: t.qrisPayload || "",
-          note: t.note || null,
-          createdAt: t.createdAt,
-          paidAt: t.paidAt || null
-        });
-      }
-      for (const b of DEFAULTS.botsConfig) {
-        await pgDb.insert(schema.botsConfig).ignore().values({
-          provider: b.provider,
-          apiKey: b.apiKey,
-          botUsername: b.botUsername || null,
-          status: b.status,
-          welcomeMessage: b.welcomeMessage,
-          autoRepliesEnabled: b.autoRepliesEnabled
-        });
-      }
-      for (const cl of DEFAULTS.chatLogs) {
-        await pgDb.insert(schema.chatLogs).ignore().values({
-          id: cl.id,
-          provider: cl.provider,
-          senderPhoneOrUser: cl.senderPhoneOrUser,
-          senderName: cl.senderName,
-          messageText: cl.messageText,
-          replyText: cl.replyText || null,
-          timestamp: cl.timestamp,
-          isIncoming: cl.isIncoming
-        });
-      }
-      
+    if (displayResult.length === 0) {
+      console.log("[MYSQL] DB config is empty. Seeding essential setups only...");
+
+      // Seed configurations
+      await pgDb.insert(schema.displayConfig).ignore().values({
+        id: "config",
+        runningText: DEFAULTS.displayConfig.runningText,
+        adsImages: DEFAULTS.displayConfig.adsImages
+      });
+
       await pgDb.insert(schema.mikrotikConfig).ignore().values({
         id: "default",
         ip: DEFAULTS.mikrotik.ip,
@@ -324,13 +261,27 @@ async function loadDb() {
         enabled: DEFAULTS.sanpayConfig.enabled
       });
 
-      await pgDb.insert(schema.displayConfig).ignore().values({
-        id: "config",
-        runningText: DEFAULTS.displayConfig.runningText,
-        adsImages: DEFAULTS.displayConfig.adsImages
-      });
+      for (const b of DEFAULTS.botsConfig) {
+        await pgDb.insert(schema.botsConfig).ignore().values({
+          provider: b.provider,
+          apiKey: b.apiKey,
+          botUsername: b.botUsername || null,
+          status: b.status,
+          welcomeMessage: b.welcomeMessage,
+          autoRepliesEnabled: b.autoRepliesEnabled
+        });
+      }
 
-      db = JSON.parse(JSON.stringify(DEFAULTS));
+      // DO NOT seed mock transaction data or default packages, vouchers, customers, chatLogs
+      db.packages = [];
+      db.vouchers = [];
+      db.customers = [];
+      db.transactions = [];
+      db.chatLogs = [];
+      db.displayConfig = JSON.parse(JSON.stringify(DEFAULTS.displayConfig));
+      db.mikrotik = JSON.parse(JSON.stringify(DEFAULTS.mikrotik));
+      db.sanpayConfig = JSON.parse(JSON.stringify(DEFAULTS.sanpayConfig));
+      db.botsConfig = JSON.parse(JSON.stringify(DEFAULTS.botsConfig));
     } else {
       console.log("[MYSQL] Loading state from MySQL...");
       db.packages = pkgResult;
@@ -789,10 +740,32 @@ async function startServer() {
     });
   });
 
-  // 2. Clear & Reset DB State
-  app.post("/api/reset", (req, res) => {
-    db = JSON.parse(JSON.stringify(DEFAULTS));
-    res.json({ success: true, message: "Database berhasil direset ke setelan awal", data: db });
+  // 2. Clear & Reset DB State to be completely empty
+  app.post("/api/reset", async (req, res) => {
+    db.packages = [];
+    db.vouchers = [];
+    db.customers = [];
+    db.transactions = [];
+    db.chatLogs = [];
+
+    if (dbStatus.connected) {
+      try {
+        await pgDb.delete(schema.packages);
+        await pgDb.delete(schema.vouchers);
+        await pgDb.delete(schema.customers);
+        await pgDb.delete(schema.transactions);
+        await pgDb.delete(schema.chatLogs);
+        console.log("[MYSQL] Cleared all transactional tables successfully.");
+      } catch (err) {
+        console.error("[MYSQL] Failed to clear tables:", err);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: "Database berhasil dikosongkan seutuhnya! Semua data paket, kupon, akun member, transaksi, dan log simulasi kini bersih.", 
+      data: db 
+    });
   });
 
   // --- DISPLAY CONFIG API ---
