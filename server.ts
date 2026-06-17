@@ -188,6 +188,34 @@ let dbStatus = {
 
 async function loadDb() {
   try {
+    // Automatically initialize/create tables using schema-mysql.sql first if they don't exist!
+    try {
+      const fs = await import("fs");
+      const schemaPath = path.join(process.cwd(), "schema-mysql.sql");
+      if (fs.existsSync(schemaPath)) {
+        const rawSql = fs.readFileSync(schemaPath, "utf8");
+        // Split by semicolon, filter out empty queries
+        const queries = rawSql
+          .split(";")
+          .map(q => q.trim())
+          .filter(q => q.length > 0);
+          
+        console.log(`[MYSQL-INIT] Automatically checking/creating tables if they do not exist (${queries.length} queries)...`);
+        const { pool } = await import("./src/db/index.ts");
+        for (const rawQuery of queries) {
+          // Remove SQL comment lines
+          const lines = rawQuery.split("\n").filter(l => !l.trim().startsWith("--"));
+          const query = lines.join("\n").trim();
+          if (query) {
+            await pool.query(query);
+          }
+        }
+        console.log("[MYSQL-INIT] Auto-schema initialization completed successfully!");
+      }
+    } catch (schemaErr) {
+      console.error("[MYSQL-INIT] Failed to create tables automatically. Moving to direct connection attempt:", schemaErr);
+    }
+
     const pkgResult = await pgDb.select().from(schema.packages);
     const voucherResult = await pgDb.select().from(schema.vouchers);
     const customerResult = await pgDb.select().from(schema.customers);
