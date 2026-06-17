@@ -213,6 +213,31 @@ async function loadDb() {
           }
         }
         console.log("[MYSQL-INIT] Auto-schema initialization completed successfully!");
+
+        // Run dynamic column migrations for newer features (e.g. password, admin_password)
+        try {
+          console.log("[MYSQL-INIT] Running dynamic schema migrations for mikrotik_config (password)...");
+          await pool.query("ALTER TABLE `mikrotik_config` ADD COLUMN `password` VARCHAR(255) NOT NULL DEFAULT ''");
+          console.log("[MYSQL-INIT] Migration success: Column 'password' added to table 'mikrotik_config'");
+        } catch (mErr: any) {
+          if (mErr?.code === "ER_DUP_FIELDNAME" || mErr?.errno === 1060) {
+            console.log("[MYSQL-INIT] Column 'password' already exists in 'mikrotik_config'");
+          } else {
+            console.warn("[MYSQL-INIT] Note: Could not add column 'password' to 'mikrotik_config' (maybe it already exists):", mErr?.message || mErr);
+          }
+        }
+
+        try {
+          console.log("[MYSQL-INIT] Running dynamic schema migrations for display_config (admin_password)...");
+          await pool.query("ALTER TABLE `display_config` ADD COLUMN `admin_password` VARCHAR(255) NOT NULL DEFAULT 'admin'");
+          console.log("[MYSQL-INIT] Migration success: Column 'admin_password' added to table 'display_config'");
+        } catch (mErr: any) {
+          if (mErr?.code === "ER_DUP_FIELDNAME" || mErr?.errno === 1060) {
+            console.log("[MYSQL-INIT] Column 'admin_password' already exists in 'display_config'");
+          } else {
+            console.warn("[MYSQL-INIT] Note: Could not add column 'admin_password' to 'display_config' (maybe it already exists):", mErr?.message || mErr);
+          }
+        }
       }
     } catch (schemaErr) {
       console.error("[MYSQL-INIT] Failed to create tables automatically. Moving to direct connection attempt:", schemaErr);
