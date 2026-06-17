@@ -78,6 +78,7 @@ export interface ChatSimMessage {
 export interface MikrotikConfig {
   ip: string;
   username: string;
+  password?: string;
   port: number;
   isConnected: boolean;
   activeHotspotUsersCount: number;
@@ -103,5 +104,6 @@ export interface SanpayConfig {
 export interface AppDisplayConfig {
   runningText: string;
   adsImages: string[];
+  adminPassword?: string;
 }
 

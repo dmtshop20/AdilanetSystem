@@ -146,6 +146,7 @@ const DEFAULTS = {
   mikrotik: {
     ip: "10.10.10.1",
     username: "admin_hotspot",
+    password: "",
     port: 8728,
     isConnected: true,
     activeHotspotUsersCount: 18,
@@ -168,7 +169,8 @@ const DEFAULTS = {
       "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1605810230434-7631ac76ec81?q=80&w=2070&auto=format&fit=crop",
       "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop"
-    ]
+    ],
+    adminPassword: "admin"
   } as AppDisplayConfig
 };
 
@@ -239,13 +241,15 @@ async function loadDb() {
       await pgDb.insert(schema.displayConfig).ignore().values({
         id: "config",
         runningText: DEFAULTS.displayConfig.runningText,
-        adsImages: DEFAULTS.displayConfig.adsImages
+        adsImages: DEFAULTS.displayConfig.adsImages,
+        adminPassword: DEFAULTS.displayConfig.adminPassword
       });
 
       await pgDb.insert(schema.mikrotikConfig).ignore().values({
         id: "default",
         ip: DEFAULTS.mikrotik.ip,
         username: DEFAULTS.mikrotik.username,
+        password: DEFAULTS.mikrotik.password || "",
         port: DEFAULTS.mikrotik.port,
         isConnected: DEFAULTS.mikrotik.isConnected,
         activeHotspotUsersCount: DEFAULTS.mikrotik.activeHotspotUsersCount,
@@ -293,6 +297,7 @@ async function loadDb() {
       db.mikrotik = mikrotikResult[0] ? {
         ip: mikrotikResult[0].ip,
         username: mikrotikResult[0].username,
+        password: mikrotikResult[0].password || "",
         port: mikrotikResult[0].port,
         isConnected: mikrotikResult[0].isConnected,
         activeHotspotUsersCount: mikrotikResult[0].activeHotspotUsersCount,
@@ -309,7 +314,8 @@ async function loadDb() {
 
       db.displayConfig = displayResult[0] ? {
         runningText: displayResult[0].runningText,
-        adsImages: displayResult[0].adsImages as string[]
+        adsImages: displayResult[0].adsImages as string[],
+        adminPassword: displayResult[0].adminPassword || "admin"
       } : DEFAULTS.displayConfig;
     }
   } catch (err: any) {
@@ -472,6 +478,7 @@ async function saveDb() {
         id: "default",
         ip: db.mikrotik.ip,
         username: db.mikrotik.username,
+        password: db.mikrotik.password || "",
         port: db.mikrotik.port,
         isConnected: db.mikrotik.isConnected,
         activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount,
@@ -481,6 +488,7 @@ async function saveDb() {
         set: {
           ip: db.mikrotik.ip,
           username: db.mikrotik.username,
+          password: db.mikrotik.password || "",
           port: db.mikrotik.port,
           isConnected: db.mikrotik.isConnected,
           activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount,
@@ -511,16 +519,215 @@ async function saveDb() {
       .values({
         id: "config",
         runningText: db.displayConfig.runningText,
-        adsImages: db.displayConfig.adsImages
+        adsImages: db.displayConfig.adsImages,
+        adminPassword: db.displayConfig.adminPassword || "admin"
       })
       .onDuplicateKeyUpdate({
         set: {
           runningText: db.displayConfig.runningText,
-          adsImages: db.displayConfig.adsImages
+          adsImages: db.displayConfig.adsImages,
+          adminPassword: db.displayConfig.adminPassword || "admin"
         }
       });
   } catch (err) {
     console.error("[MYSQL] Failed to save data to MySQL:", err);
+  }
+}
+
+// --- REAL MIKROTIK ROUTEROS v7 REST API CLIENT ---
+class MikrotikRESTClient {
+  private ip: string;
+  private port: number;
+  private username: string;
+  private secret: string;
+
+  constructor() {
+    this.ip = db.mikrotik.ip;
+    this.port = db.mikrotik.port;
+    this.username = db.mikrotik.username;
+    this.secret = db.mikrotik.password || "";
+  }
+
+  private get baseUrl() {
+    const protocol = this.port === 443 || this.port === 8443 || this.port === 442 ? "https" : "http";
+    return `${protocol}://${this.ip}:${this.port}/rest`;
+  }
+
+  private getHeaders() {
+    const creds = Buffer.from(`${this.username}:${this.secret}`).toString("base64");
+    return {
+      "Authorization": `Basic ${creds}`,
+      "Content-Type": "application/json"
+    };
+  }
+
+  async testConnection(): Promise<{ isConnected: boolean; error: string | null; profiles: string[]; activeCount: number; cpu?: number; ram?: number; uptime?: string }> {
+    try {
+      if (!this.ip || this.ip === "10.10.10.1" || this.ip === "192.168.1.1" || this.ip === "127.0.0.1" || this.ip === "localhost") {
+        throw new Error("Local/Private IP detected. Running in simulated offline standalone mode.");
+      }
+
+      console.log(`[MIKROTIK] Trying REST API connection to ${this.baseUrl}...`);
+      
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
+
+      const res = await fetch(`${this.baseUrl}/system/resource`, {
+        method: "GET",
+        headers: this.getHeaders(),
+        signal: controller.signal
+      });
+
+      clearTimeout(id);
+
+      if (!res.ok) {
+        throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+      }
+
+      const resources = await res.json() as any;
+      console.log("[MIKROTIK] Connected to MikroTik hardware resources successfully!");
+
+      let profiles = ["default"];
+      try {
+        const profRes = await fetch(`${this.baseUrl}/ip/hotspot/user/profile`, {
+          method: "GET",
+          headers: this.getHeaders()
+        });
+        if (profRes.ok) {
+          const profData = await profRes.json() as any[];
+          profiles = profData.map((p: any) => p.name || p[".id"]);
+        }
+      } catch (e) {
+        console.warn("[MIKROTIK] Failed to fetch service profiles, falling back to default list:", e);
+      }
+
+      let activeCount = 0;
+      try {
+        const actRes = await fetch(`${this.baseUrl}/ip/hotspot/active`, {
+          method: "GET",
+          headers: this.getHeaders()
+        });
+        if (actRes.ok) {
+          const actData = await actRes.json() as any[];
+          activeCount = actData.length;
+        }
+      } catch (e) {
+        // Fallback
+      }
+
+      const totalMemory = parseFloat(resources["total-memory"]) || 256 * 1024 * 1024;
+      const freeMemory = parseFloat(resources["free-memory"]) || 158 * 1024 * 1024;
+      const ramUsage = Math.round(((totalMemory - freeMemory) / totalMemory) * 100);
+
+      return {
+        isConnected: true,
+        error: null,
+        profiles,
+        activeCount,
+        cpu: parseInt(resources["cpu-load"]) || 5,
+        ram: ramUsage,
+        uptime: resources["uptime"] || "08d 14h 22m"
+      };
+
+    } catch (err: any) {
+      console.log(`[MIKROTIK] Real connection failed: ${err.message}. Initializing simulator/fallback.`);
+      return {
+        isConnected: false,
+        error: err.message,
+        profiles: ["default", "Speed_2_Mbps", "Speed_3_Mbps", "Speed_5_Mbps", "Speed_10_Mbps", "Speed_15_Mbps"],
+        activeCount: Math.floor(10 + Math.random() * 25)
+      };
+    }
+  }
+
+  async addHotspotUser(username: string, passwordString: string, profile: string): Promise<boolean> {
+    try {
+      if (!this.ip || this.ip === "10.10.10.1" || this.ip === "192.168.1.1" || this.ip === "127.0.0.1" || this.ip === "localhost") return false;
+
+      const body = {
+        name: username,
+        password: passwordString,
+        profile: profile,
+        comment: "Kupon QRIS Wi-Fi"
+      };
+
+      console.log(`[MIKROTIK] Attempting to add hotspot user ${username} in real RouterOS...`);
+      const res = await fetch(`${this.baseUrl}/ip/hotspot/user`, {
+        method: "PUT",
+        headers: this.getHeaders(),
+        body: JSON.stringify(body)
+      });
+
+      return res.ok;
+    } catch (e) {
+      console.error("[MIKROTIK] Failed to write hotspot user to real MikroTik:", e);
+      return false;
+    }
+  }
+
+  async deleteHotspotUser(username: string): Promise<boolean> {
+    try {
+      if (!this.ip || this.ip === "10.10.10.1" || this.ip === "192.168.1.1" || this.ip === "127.0.0.1" || this.ip === "localhost") return false;
+
+      console.log(`[MIKROTIK] Finding user ID for delete: ${username}`);
+      const findRes = await fetch(`${this.baseUrl}/ip/hotspot/user?.name=${username}`, {
+        method: "GET",
+        headers: this.getHeaders()
+      });
+
+      if (!findRes.ok) return false;
+      const users = await findRes.json() as any[];
+      if (users.length === 0) return false;
+
+      const userId = users[0][".id"];
+      console.log(`[MIKROTIK] Deleting user ID ${userId} on real MikroTik...`);
+      const delRes = await fetch(`${this.baseUrl}/ip/hotspot/user/${userId}`, {
+        method: "DELETE",
+        headers: this.getHeaders()
+      });
+
+      return delRes.ok;
+    } catch (e) {
+      console.error("[MIKROTIK] Failed to delete hotspot user from real MikroTik:", e);
+      return false;
+    }
+  }
+
+  async kickActiveSession(username: string): Promise<boolean> {
+    try {
+      if (!this.ip || this.ip === "10.10.10.1" || this.ip === "192.168.1.1" || this.ip === "127.0.0.1" || this.ip === "localhost") return false;
+
+      const actRes = await fetch(`${this.baseUrl}/ip/hotspot/active?.user=${username}`, {
+        method: "GET",
+        headers: this.getHeaders()
+      });
+
+      if (!actRes.ok) return false;
+      const activeSessions = await actRes.json() as any[];
+      if (activeSessions.length === 0) return false;
+
+      const sessionId = activeSessions[0][".id"];
+      console.log(`[MIKROTIK] Kicking active session ID ${sessionId} on real MikroTik...`);
+      
+      const kickRes = await fetch(`${this.baseUrl}/ip/hotspot/active/${sessionId}`, {
+        method: "DELETE",
+        headers: this.getHeaders()
+      });
+
+      return kickRes.ok;
+    } catch (e) {
+      console.error("[MIKROTIK] Failed to kick active session from real MikroTik:", e);
+      return false;
+    }
+  }
+}
+
+async function syncVouchersToRealMikrotik(vouchersList: Voucher[]) {
+  const client = new MikrotikRESTClient();
+  for (const v of vouchersList) {
+    const pkg = db.packages.find((p: VoucherPackage) => p.id === v.packageId);
+    const profileName = pkg ? pkg.name : "default";
+    await client.addHotspotUser(v.code, v.code, profileName);
   }
 }
 
@@ -770,10 +977,11 @@ async function startServer() {
 
   // --- DISPLAY CONFIG API ---
   app.post("/api/display/config", (req, res) => {
-    const { runningText, adsImages } = req.body;
+    const { runningText, adsImages, adminPassword } = req.body;
     db.displayConfig = {
-      runningText: runningText || db.displayConfig.runningText,
-      adsImages: adsImages || db.displayConfig.adsImages
+      runningText: runningText !== undefined ? runningText : db.displayConfig.runningText,
+      adsImages: adsImages !== undefined ? adsImages : db.displayConfig.adsImages,
+      adminPassword: adminPassword !== undefined ? adminPassword : (db.displayConfig.adminPassword || "admin")
     };
     res.json({ success: true, config: db.displayConfig });
   });
@@ -836,6 +1044,14 @@ async function startServer() {
     }
 
     db.vouchers = [...db.vouchers, ...newGenerated];
+
+    // Auto-sync to real MikroTik when connected
+    if (db.mikrotik.isConnected) {
+      syncVouchersToRealMikrotik(newGenerated).catch(e => {
+        console.error("[MIKROTIK] Error running voucher generation sync:", e);
+      });
+    }
+
     res.json({ success: true, message: `Berhasil men-generate ${qty} kode voucher hotspot baru`, vouchers: db.vouchers });
   });
 
@@ -977,6 +1193,14 @@ async function startServer() {
     voucher.soldTo = cust.name;
     voucher.activatedAt = new Date().toISOString().replace("T", " ").substring(0, 16);
     voucher.expiresAt = new Date(Date.now() + pkg.durationHours * 60 * 60 * 1000).toISOString().replace("T", " ").substring(0, 16);
+
+    // Sync purchased hotspot user to real MikroTik
+    if (db.mikrotik.isConnected) {
+      const client = new MikrotikRESTClient();
+      client.addHotspotUser(voucher.code, voucher.code, pkg.name).catch(e => {
+        console.error("[MIKROTIK] Error uploading purchased voucher to router:", e);
+      });
+    }
 
     res.json({ success: true, voucher, customer: cust, vouchers: db.vouchers, customers: db.customers });
   });
@@ -1277,6 +1501,14 @@ async function startServer() {
         voucher.activatedAt = new Date().toISOString().replace("T", " ").substring(0, 16);
         voucher.expiresAt = new Date(Date.now() + matchedPkg!.durationHours * 60 * 60 * 1000).toISOString().replace("T", " ").substring(0, 16);
         db.transactions[txIndex].qrisPayload = `KODE VOUCHER ANDA: ${voucher.code}`;
+
+        // Sync direct buy hotspot user to real MikroTik
+        if (db.mikrotik.isConnected) {
+          const client = new MikrotikRESTClient();
+          client.addHotspotUser(voucher.code, voucher.code, matchedPkg!.name).catch(e => {
+            console.error("[MIKROTIK] Error uploading direct buy voucher to router:", e);
+          });
+        }
       }
 
       // 3. Bot Notifications
@@ -1379,6 +1611,14 @@ async function startServer() {
         voucher.activatedAt = new Date().toISOString().replace("T", " ").substring(0, 16);
         voucher.expiresAt = new Date(Date.now() + matchedPkg!.durationHours * 60 * 60 * 1000).toISOString().replace("T", " ").substring(0, 16);
         db.transactions[txIndex].qrisPayload = `KODE VOUCHER ANDA: ${voucher.code}`; 
+
+        // Sync direct buy hotspot user to real MikroTik
+        if (db.mikrotik.isConnected) {
+          const client = new MikrotikRESTClient();
+          client.addHotspotUser(voucher.code, voucher.code, matchedPkg!.name).catch(e => {
+            console.error("[MIKROTIK] Error uploading direct buy voucher to router:", e);
+          });
+        }
       }
 
       // 3. Generate automatic simulated Bot Alerts
@@ -1456,21 +1696,52 @@ async function startServer() {
   });
 
   // --- MIKROTIK CONNECT HOTSPOT SIMULATOR ---
-  app.post("/api/mikrotik/config", (req, res) => {
+  app.post("/api/mikrotik/config", async (req, res) => {
     db.mikrotik = {
       ...db.mikrotik,
       ...req.body,
-      isConnected: true,
-      activeHotspotUsersCount: Math.floor(10 + Math.random()*25),
-      detectedProfiles: ["default", "Speed_2_Mbps", "Speed_3_Mbps", "Speed_5_Mbps", "Speed_10_Mbps", "Speed_15_Mbps"]
     };
-    res.json({ success: true, config: db.mikrotik });
+
+    const client = new MikrotikRESTClient();
+    const status = await client.testConnection();
+
+    db.mikrotik.isConnected = status.isConnected;
+    db.mikrotik.activeHotspotUsersCount = status.activeCount;
+    db.mikrotik.detectedProfiles = status.profiles;
+
+    res.json({ 
+      success: true, 
+      config: db.mikrotik,
+      realConnectionStatus: {
+        success: status.isConnected,
+        error: status.error,
+        cpu: status.cpu,
+        ram: status.ram,
+        uptime: status.uptime
+      }
+    });
   });
 
   app.post("/api/mikrotik/disconnect", (req, res) => {
     db.mikrotik.isConnected = false;
     db.mikrotik.activeHotspotUsersCount = 0;
     res.json({ success: true, config: db.mikrotik });
+  });
+
+  app.post("/api/mikrotik/kick", async (req, res) => {
+    const { username } = req.body;
+    console.log(`[MIKROTIK] Kick session requested for user: ${username}`);
+    const client = new MikrotikRESTClient();
+    const success = await client.kickActiveSession(username);
+    res.json({ success: true, kickedOnRealRouter: success });
+  });
+
+  app.post("/api/mikrotik/delete-user", async (req, res) => {
+    const { username } = req.body;
+    console.log(`[MIKROTIK] Delete requested for hotspot user: ${username}`);
+    const client = new MikrotikRESTClient();
+    const success = await client.deleteHotspotUser(username);
+    res.json({ success: true, deletedOnRealRouter: success });
   });
 
   // Standard express Vite wrapper fallback integration

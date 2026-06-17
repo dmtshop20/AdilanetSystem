@@ -25,7 +25,7 @@ export default function MikrotikPanel({
 }: Props) {
   const [ip, setIp] = useState(config.ip);
   const [username, setUsername] = useState(config.username);
-  const [pwd, setPwd] = useState("********");
+  const [pwd, setPwd] = useState(config.password || "");
   const [port, setPort] = useState(config.port);
 
   const [isConnecting, setIsConnecting] = useState(false);
@@ -40,6 +40,7 @@ export default function MikrotikPanel({
       onUpdateConfig({
         ip,
         username,
+        password: pwd,
         port,
         isConnected: true
       });
@@ -274,8 +275,22 @@ export default function MikrotikPanel({
                     <td className="p-3 px-4 text-indigo-600 font-mono">{ses.txRate}</td>
                     <td className="p-3 px-4 text-center">
                       <button 
-                        onClick={() => {
-                          alert(`Hotspot User ${ses.username} berhasil di-kick dari Router.`);
+                        onClick={async () => {
+                          try {
+                            const res = await fetch("/api/mikrotik/kick", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ username: ses.username })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              alert(`Hotspot User ${ses.username} berhasil di-kick dari Router.`);
+                            } else {
+                              alert(`Gagal memutuskan sesi ${ses.username} di Router.`);
+                            }
+                          } catch (err: any) {
+                            alert(`Gagal menghubungi server API: ${err.message}`);
+                          }
                         }}
                         className="bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-950/85 text-red-600 dark:text-red-400 px-2 py-0.5 rounded font-bold border border-red-100 dark:border-red-900/40 text-[10px] cursor-pointer"
                       >

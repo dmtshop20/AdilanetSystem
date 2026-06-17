@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS `mikrotik_config` (
     `id` VARCHAR(255) PRIMARY KEY,
     `ip` VARCHAR(255) NOT NULL,
     `username` VARCHAR(255) NOT NULL,
+    `password` VARCHAR(255) NOT NULL DEFAULT '',
     `port` INT NOT NULL,
     `is_connected` TINYINT(1) NOT NULL DEFAULT 0,
     `active_hotspot_users_count` INT NOT NULL DEFAULT 0,
@@ -101,5 +102,6 @@ CREATE TABLE IF NOT EXISTS `sanpay_config` (
 CREATE TABLE IF NOT EXISTS `display_config` (
     `id` VARCHAR(255) PRIMARY KEY,
     `running_text` TEXT NOT NULL,
-    `ads_images` JSON NOT NULL
+    `ads_images` JSON NOT NULL,
+    `admin_password` VARCHAR(255) NOT NULL DEFAULT 'admin'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

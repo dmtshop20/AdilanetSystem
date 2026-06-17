@@ -137,14 +137,15 @@ export default function App() {
 
   const handleAdminLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPasswordInput === "admin" || adminPasswordInput === "admin123") {
+    const correctPassword = displayConfig?.adminPassword || "admin";
+    if (adminPasswordInput === correctPassword) {
       setUserRole("admin");
       setActiveTab("Dashboard");
       setAdminPasswordInput("");
       setAdminAuthError("");
       setIsAdminLoginFormOpen(false);
     } else {
-      setAdminAuthError("Kata sandi yang Anda masukkan salah. Coba: admin");
+      setAdminAuthError("Kata sandi yang Anda masukkan salah.");
     }
   };
 
@@ -463,12 +464,12 @@ export default function App() {
   };
 
   // API 15: Configure bot credentials
-  const handleUpdateDisplayConfig = async (runningText: string, adsImages: string[]) => {
+  const handleUpdateDisplayConfig = async (runningText: string, adsImages: string[], adminPassword?: string) => {
     try {
       const res = await fetch("/api/display/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runningText, adsImages })
+        body: JSON.stringify({ runningText, adsImages, adminPassword })
       });
       if (res.ok) {
         await fetchAllData();
@@ -713,7 +714,7 @@ export default function App() {
                       type="password" 
                       required
                       autoFocus
-                      placeholder="Masukkan kata sandi admin (default: admin)"
+                      placeholder="Masukkan kata sandi"
                       value={adminPasswordInput}
                       onChange={(e) => setAdminPasswordInput(e.target.value)}
                       className="w-full text-xs bg-slate-900 border border-slate-800 hover:border-slate-700/60 focus:border-indigo-500 px-3.5 py-2.5 rounded-xl outline-none text-white font-mono placeholder:text-slate-600 transition"
@@ -727,10 +728,6 @@ export default function App() {
                     <LogIn size={14} />
                     Verifikasi Operator
                   </button>
-
-                  <div className="text-[10px] text-slate-500 text-center leading-relaxed font-mono">
-                    Tips pengetesan: Gunakan kata sandi <strong className="text-slate-300">"admin"</strong> atau <strong className="text-slate-350">"admin123"</strong> untuk masuk ke setelan.
-                  </div>
                 </form>
               </div>
             )}

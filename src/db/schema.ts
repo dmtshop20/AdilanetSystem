@@ -80,6 +80,7 @@ export const mikrotikConfig = mysqlTable("mikrotik_config", {
   id: varchar("id", { length: 255 }).primaryKey(), // "default"
   ip: varchar("ip", { length: 255 }).notNull(),
   username: varchar("username", { length: 255 }).notNull(),
+  password: varchar("password", { length: 255 }).notNull().default(""),
   port: int("port").notNull(),
   isConnected: boolean("is_connected").notNull().default(false),
   activeHotspotUsersCount: int("active_hotspot_users_count").notNull().default(0),
@@ -99,4 +100,5 @@ export const displayConfig = mysqlTable("display_config", {
   id: varchar("id", { length: 255 }).primaryKey(), // "config"
   runningText: text("running_text").notNull(),
   adsImages: json("ads_images").notNull(), // array of strings
+  adminPassword: varchar("admin_password", { length: 255 }).notNull().default("admin"),
 });

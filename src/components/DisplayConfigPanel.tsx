@@ -7,16 +7,17 @@ export default function DisplayConfigPanel({
   onUpdateDisplayConfig
 }: {
   displayConfig: AppDisplayConfig;
-  onUpdateDisplayConfig: (runningText: string, adsImages: string[]) => void;
+  onUpdateDisplayConfig: (runningText: string, adsImages: string[], adminPassword?: string) => void;
 }) {
   const [runningText, setRunningText] = useState(displayConfig?.runningText || "");
   const [adsImages, setAdsImages] = useState(
     displayConfig?.adsImages?.length ? displayConfig.adsImages : [""]
   );
+  const [adminPassword, setAdminPassword] = useState(displayConfig?.adminPassword || "admin");
 
   const handleUpdate = () => {
-    onUpdateDisplayConfig(runningText, adsImages.filter(i => i.trim() !== ""));
-    alert("Konfigurasi Tampilan Portal Berhasil Diperbarui!");
+    onUpdateDisplayConfig(runningText, adsImages.filter(i => i.trim() !== ""), adminPassword);
+    alert("Konfigurasi Tampilan Portal & Sandi Admin Berhasil Diperbarui!");
   };
 
   const addImage = () => {
@@ -44,6 +45,20 @@ export default function DisplayConfigPanel({
         </div>
 
         <hr className="border-slate-100 dark:border-slate-850" />
+
+        <div className="space-y-4">
+          <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">
+            Sandi Login Administrator
+          </label>
+          <input 
+            type="text" 
+            placeholder="Masukkan sandi baru administrator..." 
+            value={adminPassword}
+            onChange={e => setAdminPassword(e.target.value)}
+            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:text-slate-200 font-mono"
+          />
+          <p className="text-xs text-slate-500 dark:text-slate-400">Silakan ubah sandi bawaan lama untuk mengamankan akses pengaturan router Anda.</p>
+        </div>
 
         <div className="space-y-4">
           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300">
