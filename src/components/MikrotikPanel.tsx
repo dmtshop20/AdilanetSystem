@@ -27,7 +27,7 @@ export default function MikrotikPanel({
     ip: "",
     username: "",
     password: "",
-    port: 80,
+    port: 8728,
     isConnected: false,
     activeHotspotUsersCount: 0,
     detectedProfiles: []
@@ -36,7 +36,7 @@ export default function MikrotikPanel({
   const [ip, setIp] = useState(configSafe.ip || "");
   const [username, setUsername] = useState(configSafe.username || "");
   const [pwd, setPwd] = useState(configSafe.password || "");
-  const [port, setPort] = useState(configSafe.port || 80);
+  const [port, setPort] = useState(configSafe.port || 8728);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -49,7 +49,7 @@ export default function MikrotikPanel({
       setIp(config.ip || "");
       setUsername(config.username || "");
       setPwd(config.password || "");
-      setPort(config.port || 80);
+      setPort(config.port || 8728);
     }
   }, [config]);
 
@@ -266,11 +266,11 @@ export default function MikrotikPanel({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 font-mono uppercase">REST API Port (80/443)</label>
+                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 font-mono uppercase">API Port (8728)</label>
                 <input 
                   type="number" value={port} onChange={(e) => setPort(parseInt(e.target.value))} required
                   className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-mono text-center text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500 transition-colors"
-                  placeholder="80"
+                  placeholder="8728"
                 />
               </div>
               <div className="space-y-1">

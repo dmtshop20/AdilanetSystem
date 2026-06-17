@@ -610,102 +610,78 @@ async function saveDb() {
   }
 }
 
-// --- REAL MIKROTIK ROUTEROS v7 REST API CLIENT ---
-class MikrotikRESTClient {
-  private ip: string;
+// --- REAL MIKROTIK ROUTEROS API CLIENT (PORT 8728) ---
+// Using node-routeros for seamless compatibility with older ROS v6 and newer ROS v7
+import { RouterOSAPI } from "node-routeros";
+
+class MikrotikAPIClient {
+  private host: string;
   private port: number;
-  private username: string;
+  private user: string;
   private secret: string;
 
   constructor() {
-    this.ip = db.mikrotik.ip;
-    this.port = db.mikrotik.port;
-    this.username = db.mikrotik.username;
+    this.host = db.mikrotik.ip;
+    this.port = db.mikrotik.port || 8728; // Default MikroTik API port
+    this.user = db.mikrotik.username;
     this.secret = db.mikrotik.password || "";
   }
 
-  private get baseUrl() {
-    const protocol = this.port === 443 || this.port === 8443 || this.port === 442 ? "https" : "http";
-    return `${protocol}://${this.ip}:${this.port}/rest`;
-  }
-
-  private getHeaders() {
-    const creds = Buffer.from(`${this.username}:${this.secret}`).toString("base64");
-    return {
-      "Authorization": `Basic ${creds}`,
-      "Content-Type": "application/json"
-    };
+  private createConnection() {
+    return new RouterOSAPI({
+      host: this.host,
+      user: this.user,
+      password: this.secret,
+      port: this.port,
+      timeout: 5 // 5 seconds timeout
+    });
   }
 
   async testConnection(): Promise<{ isConnected: boolean; error: string | null; profiles: string[]; activeCount: number; cpu?: number; ram?: number; uptime?: string }> {
     try {
-      if (!this.ip || this.ip === "10.10.10.1" || this.ip === "192.168.1.1" || this.ip === "127.0.0.1" || this.ip === "localhost") {
+      if (!this.host || this.host === "10.10.10.1" || this.host === "192.168.1.1" || this.host === "127.0.0.1" || this.host === "localhost") {
         throw new Error("Local/Private IP detected. Running in simulated offline standalone mode.");
       }
 
-      if (this.port === 8728) {
-        throw new Error("Port 8728 adalah port routerOS API (lama). API REST MikroTik v7 menggunakan port HTTP/HTTPS WebFig (default 80 atau 443). Ubah port di pengaturan ke 80/443.");
-      }
-
-      console.log(`[MIKROTIK] Trying REST API connection to ${this.baseUrl}...`);
+      console.log(`[MIKROTIK] Trying RouterOS API connect to ${this.host}:${this.port}...`);
+      const conn = this.createConnection();
       
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 8000); // 8 seconds timeout
-
-      const res = await fetch(`${this.baseUrl}/system/resource`, {
-        method: "GET",
-        headers: this.getHeaders(),
-        signal: controller.signal
-      }).catch(err => {
-        if (err.name === "AbortError" || err.message.includes("aborted")) {
-          throw new Error("Koneksi Timeout (Router tidak merespon/IP salah)");
-        }
-        throw new Error(`Koneksi Gagal: ${err.message}`);
-      });
-
-      clearTimeout(id);
-
-      if (!res.ok) {
-        if (res.status === 401 || res.status === 403) {
-           throw new Error("Akses Ditolak (Username atau Password MikroTik Salah)");
-        }
-        throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+      try {
+        await conn.connect();
+      } catch (err: any) {
+        throw new Error(`Koneksi Gagal: ${err.message || "Timeout/Router Tidak Merespon"}`);
       }
 
-      const resources = await res.json() as any;
-      console.log("[MIKROTIK] Connected to MikroTik hardware resources successfully!");
+      console.log("[MIKROTIK] Connected to MikroTik successfully!");
 
+      // 1. Fetch system resources
+      const sysRes = await conn.write("/system/resource/print");
+      const resources = sysRes[0] || {};
+      
+      // 2. Fetch hotspot user profiles
       let profiles = ["default"];
       try {
-        const profRes = await fetch(`${this.baseUrl}/ip/hotspot/user/profile`, {
-          method: "GET",
-          headers: this.getHeaders()
-        });
-        if (profRes.ok) {
-           const profData = await profRes.json() as any[];
-           profiles = profData.map((p: any) => p.name || p[".id"]);
-        }
+        const profRes = await conn.write("/ip/hotspot/user/profile/print");
+        profiles = profRes.map((p: any) => p.name || p[".id"]);
       } catch (e) {
-        console.warn("[MIKROTIK] Failed to fetch service profiles, falling back to default list:", e);
+        console.warn("[MIKROTIK] Failed to fetch service profiles:", e);
       }
 
+      // 3. Fetch active users count
       let activeCount = 0;
       try {
-        const actRes = await fetch(`${this.baseUrl}/ip/hotspot/active`, {
-          method: "GET",
-          headers: this.getHeaders()
-        });
-        if (actRes.ok) {
-          const actData = await actRes.json() as any[];
-          activeCount = actData.length;
-        }
+        const actRes = await conn.write("/ip/hotspot/active/print");
+        activeCount = actRes.length;
       } catch (e) {
-        // Fallback
+        // Ignored
       }
 
-      const totalMemory = parseFloat(resources["total-memory"]) || 256 * 1024 * 1024;
-      const freeMemory = parseFloat(resources["free-memory"]) || 158 * 1024 * 1024;
+      const totalMemory = parseInt(resources["total-memory"]) || 256 * 1024 * 1024;
+      const freeMemory = parseInt(resources["free-memory"]) || 158 * 1024 * 1024;
       const ramUsage = Math.round(((totalMemory - freeMemory) / totalMemory) * 100);
+
+      // Clean up connection
+      conn.close();
 
       return {
         isConnected: true,
@@ -718,7 +694,7 @@ class MikrotikRESTClient {
       };
 
     } catch (err: any) {
-      console.log(`[MIKROTIK] Real connection failed: ${err.message}. Initializing simulator/fallback.`);
+      console.log(`[MIKROTIK] Connection failed: ${err.message}. Initializing simulator/fallback.`);
       return {
         isConnected: false,
         error: err.message,
@@ -730,88 +706,84 @@ class MikrotikRESTClient {
 
   async addHotspotUser(username: string, passwordString: string, profile: string): Promise<boolean> {
     try {
-      if (!this.ip || this.ip === "10.10.10.1" || this.ip === "192.168.1.1" || this.ip === "127.0.0.1" || this.ip === "localhost") return false;
+      if (!this.host || this.host === "127.0.0.1") return false;
+      
+      const conn = this.createConnection();
+      await conn.connect();
 
-      const body = {
-        name: username,
-        password: passwordString,
-        profile: profile,
-        comment: "Kupon QRIS Wi-Fi"
-      };
+      console.log(`[MIKROTIK] Attempting to add hotspot user ${username} in RouterOS...`);
+      await conn.write("/ip/hotspot/user/add", [
+        `=name=${username}`,
+        `=password=${passwordString}`,
+        `=profile=${profile}`,
+        `=comment=Kupon QRIS Wi-Fi`
+      ]);
 
-      console.log(`[MIKROTIK] Attempting to add hotspot user ${username} in real RouterOS...`);
-      const res = await fetch(`${this.baseUrl}/ip/hotspot/user`, {
-        method: "PUT",
-        headers: this.getHeaders(),
-        body: JSON.stringify(body)
-      });
-
-      return res.ok;
+      conn.close();
+      return true;
     } catch (e) {
-      console.error("[MIKROTIK] Failed to write hotspot user to real MikroTik:", e);
+      console.error("[MIKROTIK] Failed to write hotspot user:", e);
       return false;
     }
   }
 
   async deleteHotspotUser(username: string): Promise<boolean> {
     try {
-      if (!this.ip || this.ip === "10.10.10.1" || this.ip === "192.168.1.1" || this.ip === "127.0.0.1" || this.ip === "localhost") return false;
+      if (!this.host || this.host === "127.0.0.1") return false;
+
+      const conn = this.createConnection();
+      await conn.connect();
 
       console.log(`[MIKROTIK] Finding user ID for delete: ${username}`);
-      const findRes = await fetch(`${this.baseUrl}/ip/hotspot/user?.name=${username}`, {
-        method: "GET",
-        headers: this.getHeaders()
-      });
+      const findRes = await conn.write("/ip/hotspot/user/print", [`?name=${username}`]);
+      
+      if (findRes.length === 0) {
+        conn.close();
+        return false;
+      }
 
-      if (!findRes.ok) return false;
-      const users = await findRes.json() as any[];
-      if (users.length === 0) return false;
+      const userId = findRes[0][".id"];
+      console.log(`[MIKROTIK] Deleting user ID ${userId}...`);
+      await conn.write("/ip/hotspot/user/remove", [`=.id=${userId}`]);
 
-      const userId = users[0][".id"];
-      console.log(`[MIKROTIK] Deleting user ID ${userId} on real MikroTik...`);
-      const delRes = await fetch(`${this.baseUrl}/ip/hotspot/user/${userId}`, {
-        method: "DELETE",
-        headers: this.getHeaders()
-      });
-
-      return delRes.ok;
+      conn.close();
+      return true;
     } catch (e) {
-      console.error("[MIKROTIK] Failed to delete hotspot user from real MikroTik:", e);
+      console.error("[MIKROTIK] Failed to delete hotspot user:", e);
       return false;
     }
   }
 
   async kickActiveSession(username: string): Promise<boolean> {
     try {
-      if (!this.ip || this.ip === "10.10.10.1" || this.ip === "192.168.1.1" || this.ip === "127.0.0.1" || this.ip === "localhost") return false;
+      if (!this.host || this.host === "127.0.0.1") return false;
 
-      const actRes = await fetch(`${this.baseUrl}/ip/hotspot/active?.user=${username}`, {
-        method: "GET",
-        headers: this.getHeaders()
-      });
+      const conn = this.createConnection();
+      await conn.connect();
 
-      if (!actRes.ok) return false;
-      const activeSessions = await actRes.json() as any[];
-      if (activeSessions.length === 0) return false;
-
-      const sessionId = activeSessions[0][".id"];
-      console.log(`[MIKROTIK] Kicking active session ID ${sessionId} on real MikroTik...`);
+      const actRes = await conn.write("/ip/hotspot/active/print", [`?user=${username}`]);
       
-      const kickRes = await fetch(`${this.baseUrl}/ip/hotspot/active/${sessionId}`, {
-        method: "DELETE",
-        headers: this.getHeaders()
-      });
+      if (actRes.length === 0) {
+        conn.close();
+        return false;
+      }
 
-      return kickRes.ok;
+      const sessionId = actRes[0][".id"];
+      console.log(`[MIKROTIK] Kicking active session ID ${sessionId}...`);
+      await conn.write("/ip/hotspot/active/remove", [`=.id=${sessionId}`]);
+
+      conn.close();
+      return true;
     } catch (e) {
-      console.error("[MIKROTIK] Failed to kick active session from real MikroTik:", e);
+      console.error("[MIKROTIK] Failed to kick active session:", e);
       return false;
     }
   }
 }
 
+
 async function syncVouchersToRealMikrotik(vouchersList: Voucher[]) {
-  const client = new MikrotikRESTClient();
+  const client = new MikrotikAPIClient();
   for (const v of vouchersList) {
     const pkg = db.packages.find((p: VoucherPackage) => p.id === v.packageId);
     const profileName = pkg ? pkg.name : "default";
@@ -1326,7 +1298,7 @@ async function startServer() {
 
     // Sync purchased hotspot user to real MikroTik
     if (db.mikrotik.isConnected) {
-      const client = new MikrotikRESTClient();
+      const client = new MikrotikAPIClient();
       client.addHotspotUser(voucher.code, voucher.code, pkg.name).catch(e => {
         console.error("[MIKROTIK] Error uploading purchased voucher to router:", e);
       });
@@ -1634,7 +1606,7 @@ async function startServer() {
 
         // Sync direct buy hotspot user to real MikroTik
         if (db.mikrotik.isConnected) {
-          const client = new MikrotikRESTClient();
+          const client = new MikrotikAPIClient();
           client.addHotspotUser(voucher.code, voucher.code, matchedPkg!.name).catch(e => {
             console.error("[MIKROTIK] Error uploading direct buy voucher to router:", e);
           });
@@ -1744,7 +1716,7 @@ async function startServer() {
 
         // Sync direct buy hotspot user to real MikroTik
         if (db.mikrotik.isConnected) {
-          const client = new MikrotikRESTClient();
+          const client = new MikrotikAPIClient();
           client.addHotspotUser(voucher.code, voucher.code, matchedPkg!.name).catch(e => {
             console.error("[MIKROTIK] Error uploading direct buy voucher to router:", e);
           });
@@ -1851,7 +1823,7 @@ async function startServer() {
       });
     }
 
-    const client = new MikrotikRESTClient();
+    const client = new MikrotikAPIClient();
     const status = await client.testConnection();
 
     db.mikrotik.isConnected = status.isConnected;
@@ -1910,7 +1882,7 @@ async function startServer() {
   app.post("/api/mikrotik/kick", async (req, res) => {
     const { username } = req.body;
     console.log(`[MIKROTIK] Kick session requested for user: ${username}`);
-    const client = new MikrotikRESTClient();
+    const client = new MikrotikAPIClient();
     const success = await client.kickActiveSession(username);
     res.json({ success: true, kickedOnRealRouter: success });
   });
@@ -1918,7 +1890,7 @@ async function startServer() {
   app.post("/api/mikrotik/delete-user", async (req, res) => {
     const { username } = req.body;
     console.log(`[MIKROTIK] Delete requested for hotspot user: ${username}`);
-    const client = new MikrotikRESTClient();
+    const client = new MikrotikAPIClient();
     const success = await client.deleteHotspotUser(username);
     res.json({ success: true, deletedOnRealRouter: success });
   });
