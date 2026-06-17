@@ -643,20 +643,32 @@ class MikrotikRESTClient {
         throw new Error("Local/Private IP detected. Running in simulated offline standalone mode.");
       }
 
+      if (this.port === 8728) {
+        throw new Error("Port 8728 adalah port routerOS API (lama). API REST MikroTik v7 menggunakan port HTTP/HTTPS WebFig (default 80 atau 443). Ubah port di pengaturan ke 80/443.");
+      }
+
       console.log(`[MIKROTIK] Trying REST API connection to ${this.baseUrl}...`);
       
       const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
+      const id = setTimeout(() => controller.abort(), 8000); // 8 seconds timeout
 
       const res = await fetch(`${this.baseUrl}/system/resource`, {
         method: "GET",
         headers: this.getHeaders(),
         signal: controller.signal
+      }).catch(err => {
+        if (err.name === "AbortError" || err.message.includes("aborted")) {
+          throw new Error("Koneksi Timeout (Router tidak merespon/IP salah)");
+        }
+        throw new Error(`Koneksi Gagal: ${err.message}`);
       });
 
       clearTimeout(id);
 
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+           throw new Error("Akses Ditolak (Username atau Password MikroTik Salah)");
+        }
         throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
       }
 
@@ -670,8 +682,8 @@ class MikrotikRESTClient {
           headers: this.getHeaders()
         });
         if (profRes.ok) {
-          const profData = await profRes.json() as any[];
-          profiles = profData.map((p: any) => p.name || p[".id"]);
+           const profData = await profRes.json() as any[];
+           profiles = profData.map((p: any) => p.name || p[".id"]);
         }
       } catch (e) {
         console.warn("[MIKROTIK] Failed to fetch service profiles, falling back to default list:", e);
@@ -710,7 +722,7 @@ class MikrotikRESTClient {
       return {
         isConnected: false,
         error: err.message,
-        profiles: ["default", "Speed_2_Mbps", "Speed_3_Mbps", "Speed_5_Mbps", "Speed_10_Mbps", "Speed_15_Mbps"],
+        profiles: ["default", "Speed_2_Mbps", "Speed_3_Mbps"],
         activeCount: Math.floor(10 + Math.random() * 25)
       };
     }
@@ -1845,6 +1857,25 @@ async function startServer() {
     db.mikrotik.isConnected = status.isConnected;
     db.mikrotik.activeHotspotUsersCount = status.activeCount;
     db.mikrotik.detectedProfiles = status.profiles;
+
+    // Auto-sync MikroTik Profiles to Packages
+    if (status.isConnected && status.profiles && status.profiles.length > 0) {
+      for (const prof of status.profiles) {
+        if (prof === "default") continue; // skip default profile
+        const exists = db.packages.find((p) => p.name === prof || p.speedLimit === prof);
+        if (!exists) {
+          console.log(`[MIKROTIK] Auto-creating package for new profile: ${prof}`);
+          db.packages.push({
+            id: "pkg_" + Date.now() + Math.random().toString(36).substr(2, 5),
+            name: prof,
+            speedLimit: prof,
+            price: 5000, 
+            durationHours: 24,
+            description: `Auto-synced from MikroTik Profile: ${prof}`
+          });
+        }
+      }
+    }
 
     try {
       await saveDb();

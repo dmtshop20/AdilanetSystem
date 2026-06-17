@@ -534,15 +534,10 @@ export default function App() {
 
   // API 18: MikroTik Config
   const handleUpdateMikrotik = async (updated: Partial<MikrotikConfig>) => {
+    // MikrotikPanel already hits the '/api/mikrotik/config' API natively to handle precise connection errors.
+    // We just need to refresh the global state (including any auto-created packages) so UI is updated.
     try {
-      const res = await fetch("/api/mikrotik/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updated)
-      });
-      if (res.ok) {
-        await fetchAllData();
-      }
+      await fetchAllData();
     } catch (err) {
       console.error(err);
     }
