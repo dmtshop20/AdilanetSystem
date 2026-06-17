@@ -362,6 +362,7 @@ async function loadDb() {
 }
 
 async function saveDb() {
+  // 1. Packages
   try {
     for (const p of db.packages) {
       await pgDb.insert(schema.packages)
@@ -382,7 +383,12 @@ async function saveDb() {
         await pgDb.delete(schema.packages).where(eq(schema.packages.id, ep.id));
       }
     }
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save packages:", err?.message || err);
+  }
 
+  // 2. Vouchers
+  try {
     for (const v of db.vouchers) {
       await pgDb.insert(schema.vouchers)
         .values(v)
@@ -406,7 +412,12 @@ async function saveDb() {
         await pgDb.delete(schema.vouchers).where(eq(schema.vouchers.id, ev.id));
       }
     }
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save vouchers:", err?.message || err);
+  }
 
+  // 3. Customers
+  try {
     for (const c of db.customers) {
       await pgDb.insert(schema.customers)
         .values(c)
@@ -429,7 +440,12 @@ async function saveDb() {
         await pgDb.delete(schema.customers).where(eq(schema.customers.id, ec.id));
       }
     }
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save customers:", err?.message || err);
+  }
 
+  // 4. Transactions
+  try {
     for (const t of db.transactions) {
       await pgDb.insert(schema.transactions)
         .values({
@@ -470,7 +486,12 @@ async function saveDb() {
         await pgDb.delete(schema.transactions).where(eq(schema.transactions.id, etx.id));
       }
     }
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save transactions:", err?.message || err);
+  }
 
+  // 5. Bots Config
+  try {
     for (const b of db.botsConfig) {
       await pgDb.insert(schema.botsConfig)
         .values(b)
@@ -484,7 +505,12 @@ async function saveDb() {
           }
         });
     }
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save botsConfig:", err?.message || err);
+  }
 
+  // 6. Chat Logs
+  try {
     for (const cl of db.chatLogs) {
       await pgDb.insert(schema.chatLogs)
         .values(cl)
@@ -506,30 +532,41 @@ async function saveDb() {
         await pgDb.delete(schema.chatLogs).where(eq(schema.chatLogs.id, ec.id));
       }
     }
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save chatLogs:", err?.message || err);
+  }
 
+  // 7. MikroTik Config
+  try {
     await pgDb.insert(schema.mikrotikConfig)
       .values({
         id: "default",
-        ip: db.mikrotik.ip,
-        username: db.mikrotik.username,
+        ip: db.mikrotik.ip || "",
+        username: db.mikrotik.username || "",
         password: db.mikrotik.password || "",
-        port: db.mikrotik.port,
-        isConnected: db.mikrotik.isConnected,
-        activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount,
-        detectedProfiles: db.mikrotik.detectedProfiles
+        port: db.mikrotik.port || 8728,
+        isConnected: db.mikrotik.isConnected || false,
+        activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount || 0,
+        detectedProfiles: db.mikrotik.detectedProfiles || []
       })
       .onDuplicateKeyUpdate({
         set: {
-          ip: db.mikrotik.ip,
-          username: db.mikrotik.username,
+          ip: db.mikrotik.ip || "",
+          username: db.mikrotik.username || "",
           password: db.mikrotik.password || "",
-          port: db.mikrotik.port,
-          isConnected: db.mikrotik.isConnected,
-          activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount,
-          detectedProfiles: db.mikrotik.detectedProfiles
+          port: db.mikrotik.port || 8728,
+          isConnected: db.mikrotik.isConnected || false,
+          activeHotspotUsersCount: db.mikrotik.activeHotspotUsersCount || 0,
+          detectedProfiles: db.mikrotik.detectedProfiles || []
         }
       });
+    console.log("[MYSQL-SAVE] MikroTik config saved successfully!");
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save MikroTik config:", err?.message || err);
+  }
 
+  // 8. Sanpay Config
+  try {
     await pgDb.insert(schema.sanpayConfig)
       .values({
         id: "config",
@@ -548,7 +585,12 @@ async function saveDb() {
           enabled: db.sanpayConfig.enabled
         }
       });
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save Sanpay config:", err?.message || err);
+  }
 
+  // 9. Display Config
+  try {
     await pgDb.insert(schema.displayConfig)
       .values({
         id: "config",
@@ -563,8 +605,8 @@ async function saveDb() {
           adminPassword: db.displayConfig.adminPassword || "admin"
         }
       });
-  } catch (err) {
-    console.error("[MYSQL] Failed to save data to MySQL:", err);
+  } catch (err: any) {
+    console.error("[MYSQL-SAVE] Failed to save displayConfig:", err?.message || err);
   }
 }
 
@@ -958,6 +1000,14 @@ async function startServer() {
   app.use(express.json());
   await loadDb();
 
+  // Disable caching for all API responses to prevent Chrome from loading cached stale settings
+  app.use("/api", (req, res, next) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    next();
+  });
+
   // Auto-sync middleware to MySQL on any modifying REST method
   app.use((req, res, next) => {
     res.on("finish", async () => {
@@ -988,6 +1038,15 @@ async function startServer() {
     db.customers = [];
     db.transactions = [];
     db.chatLogs = [];
+    db.mikrotik = {
+      ip: "",
+      username: "",
+      password: "",
+      port: 8728,
+      isConnected: false,
+      activeHotspotUsersCount: 0,
+      detectedProfiles: []
+    };
 
     if (dbStatus.connected) {
       try {
@@ -996,7 +1055,32 @@ async function startServer() {
         await pgDb.delete(schema.customers);
         await pgDb.delete(schema.transactions);
         await pgDb.delete(schema.chatLogs);
-        console.log("[MYSQL] Cleared all transactional tables successfully.");
+        
+        // Also update mikrotik_config row to empty
+        await pgDb.insert(schema.mikrotikConfig)
+          .values({
+            id: "default",
+            ip: "",
+            username: "",
+            password: "",
+            port: 8728,
+            isConnected: false,
+            activeHotspotUsersCount: 0,
+            detectedProfiles: []
+          })
+          .onDuplicateKeyUpdate({
+            set: {
+              ip: "",
+              username: "",
+              password: "",
+              port: 8728,
+              isConnected: false,
+              activeHotspotUsersCount: 0,
+              detectedProfiles: []
+            }
+          });
+          
+        console.log("[MYSQL] Cleared all transactional tables and reset MikroTik config successfully.");
       } catch (err) {
         console.error("[MYSQL] Failed to clear tables:", err);
       }
@@ -1742,7 +1826,12 @@ async function startServer() {
     };
 
     if (onlySave) {
-      console.log(`[MIKROTIK] Credentials saved into database/memory: IP=${db.mikrotik.ip}, PORT=${db.mikrotik.port}`);
+      try {
+        await saveDb();
+        console.log(`[MIKROTIK] Credentials saved into database: IP=${db.mikrotik.ip}, PORT=${db.mikrotik.port}`);
+      } catch (dbErr: any) {
+        console.error("[MIKROTIK] Failed to save credentials on onlySave:", dbErr);
+      }
       return res.json({ 
         success: true, 
         config: db.mikrotik,
@@ -1757,6 +1846,12 @@ async function startServer() {
     db.mikrotik.activeHotspotUsersCount = status.activeCount;
     db.mikrotik.detectedProfiles = status.profiles;
 
+    try {
+      await saveDb();
+    } catch (dbErr: any) {
+      console.error("[MIKROTIK] Failed to save database on connection test:", dbErr);
+    }
+
     res.json({ 
       success: true, 
       config: db.mikrotik,
@@ -1770,9 +1865,14 @@ async function startServer() {
     });
   });
 
-  app.post("/api/mikrotik/disconnect", (req, res) => {
+  app.post("/api/mikrotik/disconnect", async (req, res) => {
     db.mikrotik.isConnected = false;
     db.mikrotik.activeHotspotUsersCount = 0;
+    try {
+      await saveDb();
+    } catch (dbErr: any) {
+      console.error("[MIKROTIK] Failed to save database on disconnect:", dbErr);
+    }
     res.json({ success: true, config: db.mikrotik });
   });
 
