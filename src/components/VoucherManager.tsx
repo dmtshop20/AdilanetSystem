@@ -30,6 +30,9 @@ export default function VoucherManager({
   onGenerateVouchers,
   onClearAvailableVouchers
 }: Props) {
+  const vouchersSafe = vouchers || [];
+  const packagesSafe = packages || [];
+
   // Local state for modals & search
   const [isPkgModalOpen, setIsPkgModalOpen] = useState(false);
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
@@ -42,7 +45,7 @@ export default function VoucherManager({
   const [pkgDesc, setPkgDesc] = useState("");
 
   // Generate Voucher form states
-  const [genPkgId, setGenPkgId] = useState(packages[0]?.id || "");
+  const [genPkgId, setGenPkgId] = useState(packagesSafe[0]?.id || "");
   const [genQty, setGenQty] = useState(20);
   const [customPrefix, setCustomPrefix] = useState("WIFI");
 
@@ -91,7 +94,7 @@ export default function VoucherManager({
   };
 
   // Filter vouchers
-  const filteredVouchers = vouchers.filter(v => {
+  const filteredVouchers = vouchersSafe.filter(v => {
     const matchesSearch = v.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           v.packageName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           (v.soldTo && v.soldTo.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -112,8 +115,8 @@ export default function VoucherManager({
           <button 
             type="button"
             onClick={() => {
-              if (packages.length > 0) {
-                setGenPkgId(packages[0].id);
+              if (packagesSafe.length > 0) {
+                setGenPkgId(packagesSafe[0].id);
                 setIsGenModalOpen(true);
               } else {
                 alert("Silakan buat Paket Voucher terlebih dahulu!");
@@ -139,14 +142,14 @@ export default function VoucherManager({
       <div className="space-y-3">
         <h3 className="text-xs font-bold font-mono text-slate-400 uppercase tracking-widest">Daftar Paket Kecepatan WiFi</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {packages.length === 0 ? (
+          {packagesSafe.length === 0 ? (
             <div className="bg-slate-50 border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400 rounded-xl col-span-full">
               Belum ada paket voucher wifi. Klik "Tambah Paket" untuk membuatnya pertama kali!
             </div>
           ) : (
-            packages.map(pkg => {
+            packagesSafe.map(pkg => {
               // Count available voucher units
-              const unitCount = vouchers.filter(v => v.packageId === pkg.id && v.status === "Available").length;
+              const unitCount = vouchersSafe.filter(v => v.packageId === pkg.id && v.status === "Available").length;
               return (
                 <div key={pkg.id} className="bg-white p-5 rounded-xl border border-slate-100 shadow-3xs hover:shadow-2xs transition-all relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-3 text-[10px] font-mono bg-indigo-50 text-indigo-700 font-bold rounded-bl-lg">
@@ -223,7 +226,7 @@ export default function VoucherManager({
                 className="bg-transparent border-none outline-none font-medium text-slate-700 cursor-pointer"
               >
                 <option value="ALL">Semua Paket</option>
-                {packages.map(p => (
+                {packagesSafe.map(p => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
@@ -423,7 +426,7 @@ export default function VoucherManager({
                   onChange={(e) => setGenPkgId(e.target.value)}
                   className="w-full text-xs border border-slate-200 px-3 py-2 rounded-xl outline-none focus:border-indigo-500 bg-white"
                 >
-                  {packages.map(p => (
+                  {packagesSafe.map(p => (
                     <option key={p.id} value={p.id}>{p.name} - {formatRupiah(p.price)}</option>
                   ))}
                 </select>

@@ -23,10 +23,20 @@ export default function MikrotikPanel({
   onUpdateConfig,
   onDisconnect
 }: Props) {
-  const [ip, setIp] = useState(config.ip);
-  const [username, setUsername] = useState(config.username);
-  const [pwd, setPwd] = useState(config.password || "");
-  const [port, setPort] = useState(config.port);
+  const configSafe = config || {
+    ip: "",
+    username: "",
+    password: "",
+    port: 8728,
+    isConnected: false,
+    activeHotspotUsersCount: 0,
+    detectedProfiles: []
+  };
+
+  const [ip, setIp] = useState(configSafe.ip || "");
+  const [username, setUsername] = useState(configSafe.username || "");
+  const [pwd, setPwd] = useState(configSafe.password || "");
+  const [port, setPort] = useState(configSafe.port || 8728);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -35,10 +45,12 @@ export default function MikrotikPanel({
   const [memoryUsage, setMemoryUsage] = useState(38.4); // MB or %
 
   React.useEffect(() => {
-    setIp(config.ip);
-    setUsername(config.username);
-    setPwd(config.password || "");
-    setPort(config.port);
+    if (config) {
+      setIp(config.ip || "");
+      setUsername(config.username || "");
+      setPwd(config.password || "");
+      setPort(config.port || 8728);
+    }
   }, [config]);
 
   const handleSaveSettings = async (e: React.FormEvent) => {
@@ -138,7 +150,7 @@ export default function MikrotikPanel({
           <p className="text-xs text-slate-500 dark:text-slate-400">Integritasi router nirkabel, telemetri pemakaian resource RAM/CPU, serta daftar sesi pelanggan aktif.</p>
         </div>
 
-        {config.isConnected ? (
+        {configSafe.isConnected ? (
           <button 
             type="button"
             onClick={handleDisconnect}
@@ -164,7 +176,7 @@ export default function MikrotikPanel({
             Router Telemetry (ROS v7.14)
           </h4>
 
-          {config.isConnected ? (
+          {configSafe.isConnected ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 border border-slate-100 dark:border-slate-800 rounded-xl space-y-2">
@@ -214,8 +226,8 @@ export default function MikrotikPanel({
                   Sistem otomatis melacak, mengurai, dan mendeteksi profil kecepatan (Bandwidth Profil) yang dikonfigurasikan pada User Profile Hotspot di MikroTik Anda:
                 </p>
                 <div className="flex flex-wrap gap-2 pt-1 font-mono">
-                  {config.detectedProfiles && config.detectedProfiles.length > 0 ? (
-                    config.detectedProfiles.map((prof, pIdx) => (
+                  {configSafe.detectedProfiles && configSafe.detectedProfiles.length > 0 ? (
+                    configSafe.detectedProfiles.map((prof, pIdx) => (
                       <span key={pIdx} className="text-[10px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1 bg-white dark:bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-200/60 dark:border-slate-800 shadow-3xs hover:border-indigo-500 transition-colors cursor-default">
                         <CheckCircle2 size={10} className="text-emerald-500" />
                         <span>{prof}</span>
@@ -292,7 +304,7 @@ export default function MikrotikPanel({
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors disabled:bg-indigo-400 flex items-center justify-center gap-1.5 cursor-pointer border-none"
               >
                 <Wifi size={14} />
-                {isConnecting ? "Mencoba Koneksi Router..." : config.isConnected ? "Uji Koneksi Router Ulang" : "Koneksikan & Uji Router"}
+                {isConnecting ? "Mencoba Koneksi Router..." : configSafe.isConnected ? "Uji Koneksi Router Ulang" : "Koneksikan & Uji Router"}
               </button>
             </div>
           </form>
@@ -325,7 +337,7 @@ export default function MikrotikPanel({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-              {!config.isConnected ? (
+              {!configSafe.isConnected ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-amber-600 bg-amber-50/20 dark:bg-amber-950/10">
                     ⚠️ MikroTik terputus. Silakan hubungkan router di atas untuk menarik data sesi live.

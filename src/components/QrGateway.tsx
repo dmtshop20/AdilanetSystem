@@ -230,10 +230,12 @@ export default function QrGateway({
     setTimeout(() => setCopiedText(false), 2000);
   };
 
-  const filteredTxs = transactions.filter(t => {
-    return t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           t.transactionId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           t.status.toLowerCase().includes(searchQuery.toLowerCase());
+  const transactionsSafe = transactions || [];
+
+  const filteredTxs = transactionsSafe.filter(t => {
+    return (t?.customerName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+           (t?.transactionId || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+           (t?.status || "").toLowerCase().includes(searchQuery.toLowerCase());
   }).reverse(); // Latest transaction first
 
   return (

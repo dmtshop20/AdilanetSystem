@@ -81,13 +81,15 @@ export default function MemberManager({
     setIsTopupOpen(false);
   };
 
-  const filteredCustomers = customers.filter(c => {
-    return c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           c.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           c.phone.includes(searchQuery);
+  const customersSafe = customers || [];
+
+  const filteredCustomers = customersSafe.filter(c => {
+    return (c?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+           (c?.username || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+           (c?.phone || "").includes(searchQuery);
   });
 
-  const selectedCustObj = customers.find(c => c.id === selectedCustomerId);
+  const selectedCustObj = customersSafe.find(c => c.id === selectedCustomerId);
 
   return (
     <div className="space-y-6">

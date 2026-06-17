@@ -33,6 +33,10 @@ export default function BotIntegration({
   onSimulateMessage,
   onClearLogs
 }: Props) {
+  const configsSafe = configs || [];
+  const chatLogsSafe = chatLogs || [];
+  const customersSafe = customers || [];
+
   // Config state
   const [activeProvider, setActiveProvider] = useState<'WhatsApp' | 'Telegram'>("WhatsApp");
   const [apiKey, setApiKey] = useState("");
@@ -50,17 +54,17 @@ export default function BotIntegration({
   // Auto scroll to chat bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatLogs]);
+  }, [chatLogsSafe]);
 
   // Load config when toggling tab
   useEffect(() => {
-    const activeCfg = configs.find(c => c.provider === activeProvider);
+    const activeCfg = configsSafe.find(c => c.provider === activeProvider);
     if (activeCfg) {
       setApiKey(activeCfg.apiKey);
       setWelcomeMsg(activeCfg.welcomeMessage);
       setIsRepliesActive(activeCfg.autoRepliesEnabled);
     }
-  }, [activeProvider, configs]);
+  }, [activeProvider, configsSafe]);
 
   const handleSaveConfig = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,7 +79,7 @@ export default function BotIntegration({
     setInputText("");
   };
 
-  const activeBotConfig = configs.find(c => c.provider === simProvider);
+  const activeBotConfig = configsSafe.find(c => c.provider === simProvider);
 
   return (
     <div className="space-y-6">
@@ -190,7 +194,7 @@ export default function BotIntegration({
                 onChange={(e) => {
                   const val = e.target.value;
                   setSelectedUserPhone(val);
-                  const found = customers.find(c => c.phone === val || c.username === val);
+                  const found = customersSafe.find(c => c.phone === val || c.username === val);
                   if (found) {
                     setSelectedUserName(found.name);
                   } else {
@@ -200,7 +204,7 @@ export default function BotIntegration({
                 className="bg-white border border-slate-200 px-2 py-1 rounded-lg outline-none font-medium text-slate-600 cursor-any max-w-[120px]"
               >
                 <option value="08xxxxxxxx">Guest (Tamu)</option>
-                {customers.map(c => (
+                {customersSafe.map(c => (
                   <option key={c.id} value={simProvider === 'WhatsApp' ? c.phone : c.username}>
                     {c.name}
                   </option>
@@ -228,14 +232,14 @@ export default function BotIntegration({
               </span>
             </div>
 
-            {chatLogs.filter(log => log.provider === simProvider).length === 0 ? (
+            {chatLogsSafe.filter(log => log.provider === simProvider).length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-6 text-slate-400 space-y-1">
-                <Smartphone size={28} className="text-slate-300" />
+                <Smartphone size={28} className="text-slate-350" />
                 <span className="text-xs">Belum ada obrolan simulator chatbot.</span>
                 <span className="text-[10px] text-slate-400 italic">Ketik pesan di bawah dan lihat auto-reply robot.</span>
               </div>
             ) : (
-              chatLogs.filter(log => log.provider === simProvider).map((log, idx) => (
+              chatLogsSafe.filter(log => log.provider === simProvider).map((log, idx) => (
                 <div key={log.id} className="space-y-1.5">
                   {/* Sender user label */}
                   {log.isIncoming && (
