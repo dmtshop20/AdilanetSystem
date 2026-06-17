@@ -39,7 +39,9 @@ import CustomerPortal from "./components/CustomerPortal";
 import DisplayConfigPanel from "./components/DisplayConfigPanel";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("Dashboard");
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    return localStorage.getItem("wifi_active_tab") || "Dashboard";
+  });
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -76,12 +78,41 @@ export default function App() {
   });
 
   // Client session for Customer Portal
-  const [currentCustomer, setCurrentCustomer] = useState<CustomerAccount | null>(null);
+  const [currentCustomer, setCurrentCustomer] = useState<CustomerAccount | null>(() => {
+    const saved = localStorage.getItem("wifi_current_customer");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
   const [isLainnyaOpen, setIsLainnyaOpen] = useState(false);
 
   // User Role control in navigation gate
-  const [userRole, setUserRole] = useState<'guest' | 'admin' | 'customer'>('guest');
+  const [userRole, setUserRole] = useState<'guest' | 'admin' | 'customer'>(() => {
+    return (localStorage.getItem("wifi_user_role") as 'guest' | 'admin' | 'customer') || 'guest';
+  });
+
+  // Keep states persisted on changes/refresh
+  useEffect(() => {
+    localStorage.setItem("wifi_active_tab", activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (currentCustomer) {
+      localStorage.setItem("wifi_current_customer", JSON.stringify(currentCustomer));
+    } else {
+      localStorage.removeItem("wifi_current_customer");
+    }
+  }, [currentCustomer]);
+
+  useEffect(() => {
+    localStorage.setItem("wifi_user_role", userRole);
+  }, [userRole]);
   const [isAdminLoginFormOpen, setIsAdminLoginFormOpen] = useState(false);
   const [adminPasswordInput, setAdminPasswordInput] = useState("");
   const [adminAuthError, setAdminAuthError] = useState("");
