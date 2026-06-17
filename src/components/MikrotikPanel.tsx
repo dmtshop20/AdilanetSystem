@@ -28,24 +28,85 @@ export default function MikrotikPanel({
   const [pwd, setPwd] = useState(config.password || "");
   const [port, setPort] = useState(config.port);
 
+  const [isSaving, setIsSaving] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [uptime, setUptime] = useState("08 days, 14 hours, 22 minutes");
   const [cpuUsage, setCpuUsage] = useState(5); // in percentage
   const [memoryUsage, setMemoryUsage] = useState(38.4); // MB or %
 
-  const handleConnect = (e: React.FormEvent) => {
+  React.useEffect(() => {
+    setIp(config.ip);
+    setUsername(config.username);
+    setPwd(config.password || "");
+    setPort(config.port);
+  }, [config]);
+
+  const handleSaveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/mikrotik/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          onlySave: true,
+          ip,
+          username,
+          password: pwd,
+          port
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("Konfigurasi MikroTik berhasil disimpan ke database!");
+        onUpdateConfig({
+          ip,
+          username,
+          password: pwd,
+          port,
+          isConnected: data.config.isConnected
+        });
+      } else {
+        alert("Gagal menyimpan konfigurasi MikroTik.");
+      }
+    } catch (err: any) {
+      alert(`Gagal menghubungi server API: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsConnecting(true);
-    setTimeout(() => {
-      onUpdateConfig({
-        ip,
-        username,
-        password: pwd,
-        port,
-        isConnected: true
+    try {
+      const res = await fetch("/api/mikrotik/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          onlySave: false,
+          ip,
+          username,
+          password: pwd,
+          port
+        })
       });
+      const data = await res.json();
+      if (data.success) {
+        onUpdateConfig(data.config);
+        if (data.realConnectionStatus?.success) {
+          alert("Koneksi berhasil terhubung langsung ke hardware MikroTik RouterOS!");
+        } else {
+          alert(`Konfigurasi disimpan. Namun koneksi gagal dilakukan: ${data.realConnectionStatus?.error || 'Tidak dapat terhubung'}`);
+        }
+      } else {
+        alert("Gagal menghubungkan router.");
+      }
+    } catch (err: any) {
+      alert(`Gagal menghubungi server API: ${err.message}`);
+    } finally {
       setIsConnecting(false);
-    }, 1200);
+    }
   };
 
   const handleDisconnect = () => {
@@ -181,12 +242,13 @@ export default function MikrotikPanel({
             Kredensial API MikroTik
           </h4>
 
-          <form onSubmit={handleConnect} className="space-y-3">
+          <form onSubmit={handleSaveSettings} className="space-y-3">
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 font-mono uppercase">Router IP Address</label>
               <input 
                 type="text" value={ip} onChange={(e) => setIp(e.target.value)} required
                 className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-mono text-center font-bold text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500 transition-colors"
+                placeholder="misal: 192.168.0.1"
               />
             </div>
 
@@ -203,6 +265,7 @@ export default function MikrotikPanel({
                 <input 
                   type="text" value={username} onChange={(e) => setUsername(e.target.value)} required
                   className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-mono text-center text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500 transition-colors"
+                  placeholder="admin"
                 />
               </div>
             </div>
@@ -212,16 +275,26 @@ export default function MikrotikPanel({
               <input 
                 type="password" value={pwd} onChange={(e) => setPwd(e.target.value)}
                 className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 rounded-xl font-mono text-center text-slate-800 dark:text-slate-200 outline-none focus:border-indigo-500 transition-colors"
+                placeholder="kosongkan jika tidak ada"
               />
             </div>
 
-            <button 
-              type="submit" disabled={isConnecting}
-              className="w-full mt-2 bg-indigo-600 hover:bg-indigo-750 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors disabled:bg-indigo-400 flex items-center justify-center gap-1.5 cursor-pointer border-none"
-            >
-              <Wifi size={14} />
-              {isConnecting ? "Mencoba Koneksi..." : config.isConnected ? "Simpan & Hubungkan Kembali" : "Hubungkan Router"}
-            </button>
+            <div className="flex flex-col gap-2 pt-2">
+              <button 
+                type="submit" disabled={isSaving || isConnecting}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors disabled:bg-emerald-400 flex items-center justify-center gap-1.5 cursor-pointer border-none"
+              >
+                {isSaving ? "Menyimpan ke DB..." : "Simpan Kredensial ke Database"}
+              </button>
+
+              <button 
+                type="button" onClick={handleConnect} disabled={isSaving || isConnecting}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl shadow-xs transition-colors disabled:bg-indigo-400 flex items-center justify-center gap-1.5 cursor-pointer border-none"
+              >
+                <Wifi size={14} />
+                {isConnecting ? "Mencoba Koneksi Router..." : config.isConnected ? "Uji Koneksi Router Ulang" : "Koneksikan & Uji Router"}
+              </button>
+            </div>
           </form>
         </div>
       </div>

@@ -32,6 +32,7 @@ RUN npm ci --only=production
 
 # Copy compiled application code and static assets from builder stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/schema-mysql.sql ./schema-mysql.sql
 
 # Expose port 3000 (standard for Coolify reverse-proxy ingress)
 EXPOSE 3000

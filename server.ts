@@ -144,13 +144,13 @@ const DEFAULTS = {
   ] as ChatSimMessage[],
 
   mikrotik: {
-    ip: "10.10.10.1",
-    username: "admin_hotspot",
+    ip: "",
+    username: "",
     password: "",
     port: 8728,
-    isConnected: true,
-    activeHotspotUsersCount: 18,
-    detectedProfiles: ["default", "Speed_2_Mbps", "Speed_3_Mbps", "Speed_5_Mbps", "Speed_10_Mbps", "Speed_15_Mbps"]
+    isConnected: false,
+    activeHotspotUsersCount: 0,
+    detectedProfiles: []
   } as MikrotikConfig,
 
   sanpayConfig: {
@@ -209,38 +209,47 @@ async function loadDb() {
           const lines = rawQuery.split("\n").filter(l => !l.trim().startsWith("--"));
           const query = lines.join("\n").trim();
           if (query) {
-            await pool.query(query);
+            try {
+              await pool.query(query);
+            } catch (err: any) {
+              console.warn(`[MYSQL-INIT] Note: Skip/warn on raw query: ${query.substring(0, 100)}... - Error: ${err?.message || err}`);
+            }
           }
         }
-        console.log("[MYSQL-INIT] Auto-schema initialization completed successfully!");
-
-        // Run dynamic column migrations for newer features (e.g. password, admin_password)
-        try {
-          console.log("[MYSQL-INIT] Running dynamic schema migrations for mikrotik_config (password)...");
-          await pool.query("ALTER TABLE `mikrotik_config` ADD COLUMN `password` VARCHAR(255) NOT NULL DEFAULT ''");
-          console.log("[MYSQL-INIT] Migration success: Column 'password' added to table 'mikrotik_config'");
-        } catch (mErr: any) {
-          if (mErr?.code === "ER_DUP_FIELDNAME" || mErr?.errno === 1060) {
-            console.log("[MYSQL-INIT] Column 'password' already exists in 'mikrotik_config'");
-          } else {
-            console.warn("[MYSQL-INIT] Note: Could not add column 'password' to 'mikrotik_config' (maybe it already exists):", mErr?.message || mErr);
-          }
-        }
-
-        try {
-          console.log("[MYSQL-INIT] Running dynamic schema migrations for display_config (admin_password)...");
-          await pool.query("ALTER TABLE `display_config` ADD COLUMN `admin_password` VARCHAR(255) NOT NULL DEFAULT 'admin'");
-          console.log("[MYSQL-INIT] Migration success: Column 'admin_password' added to table 'display_config'");
-        } catch (mErr: any) {
-          if (mErr?.code === "ER_DUP_FIELDNAME" || mErr?.errno === 1060) {
-            console.log("[MYSQL-INIT] Column 'admin_password' already exists in 'display_config'");
-          } else {
-            console.warn("[MYSQL-INIT] Note: Could not add column 'admin_password' to 'display_config' (maybe it already exists):", mErr?.message || mErr);
-          }
-        }
+        console.log("[MYSQL-INIT] Auto-schema initialization scan completed!");
       }
     } catch (schemaErr) {
-      console.error("[MYSQL-INIT] Failed to create tables automatically. Moving to direct connection attempt:", schemaErr);
+      console.error("[MYSQL-INIT] Failed to parse schema-mysql.sql automatically:", schemaErr);
+    }
+
+    // Run dynamic column migrations in a separate, guaranteed step so SELECT/INSERT do not crash on older DBs
+    try {
+      const { pool } = await import("./src/db/index.ts");
+      console.log("[MYSQL-INIT] Running isolated dynamic column migration: mikrotik_config (password)...");
+      try {
+        await pool.query("ALTER TABLE `mikrotik_config` ADD COLUMN `password` VARCHAR(255) NOT NULL DEFAULT ''");
+        console.log("[MYSQL-INIT] Migration success: Column 'password' added to table 'mikrotik_config'");
+      } catch (mErr: any) {
+        if (mErr?.code === "ER_DUP_FIELDNAME" || mErr?.errno === 1060) {
+          console.log("[MYSQL-INIT] Column 'password' already exists in 'mikrotik_config'");
+        } else {
+          console.warn("[MYSQL-INIT] Note: Could not add column 'password' to 'mikrotik_config':", mErr?.message || mErr);
+        }
+      }
+
+      console.log("[MYSQL-INIT] Running isolated dynamic column migration: display_config (admin_password)...");
+      try {
+        await pool.query("ALTER TABLE `display_config` ADD COLUMN `admin_password` VARCHAR(255) NOT NULL DEFAULT 'admin'");
+        console.log("[MYSQL-INIT] Migration success: Column 'admin_password' added to table 'display_config'");
+      } catch (mErr: any) {
+        if (mErr?.code === "ER_DUP_FIELDNAME" || mErr?.errno === 1060) {
+          console.log("[MYSQL-INIT] Column 'admin_password' already exists in 'display_config'");
+        } else {
+          console.warn("[MYSQL-INIT] Note: Could not add column 'admin_password' to 'display_config':", mErr?.message || mErr);
+        }
+      }
+    } catch (migGlobalErr: any) {
+      console.error("[MYSQL-INIT] Failed to run isolated migrations steps:", migGlobalErr?.message || migGlobalErr);
     }
 
     const pkgResult = await pgDb.select().from(schema.packages);
@@ -1722,10 +1731,24 @@ async function startServer() {
 
   // --- MIKROTIK CONNECT HOTSPOT SIMULATOR ---
   app.post("/api/mikrotik/config", async (req, res) => {
+    const { onlySave, ip, username, password, port } = req.body;
+
     db.mikrotik = {
       ...db.mikrotik,
-      ...req.body,
+      ip: ip !== undefined ? ip : db.mikrotik.ip,
+      username: username !== undefined ? username : db.mikrotik.username,
+      password: password !== undefined ? password : db.mikrotik.password,
+      port: port !== undefined ? port : db.mikrotik.port,
     };
+
+    if (onlySave) {
+      console.log(`[MIKROTIK] Credentials saved into database/memory: IP=${db.mikrotik.ip}, PORT=${db.mikrotik.port}`);
+      return res.json({ 
+        success: true, 
+        config: db.mikrotik,
+        message: "Konfigurasi MikroTik berhasil disimpan di database!"
+      });
+    }
 
     const client = new MikrotikRESTClient();
     const status = await client.testConnection();
